@@ -3,12 +3,12 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 export default function CohortChart({ title, subtitle, data }) {
   if (!data || !Array.isArray(data) || data.length === 0) return null;
 
-  // Normalize data to [{name, buy_pct, hold_pct, leave_pct}]
+  // Normalize data to [{name, propensity, churn_pct, n}]
   const chartData = data.map(d => ({
     name: d.name || d.label || d.group || "?",
-    buy_pct: Math.round((d.buy_pct ?? d.propensity ?? 0) * 100) / 100,
-    hold_pct: Math.round((d.hold_pct ?? 0) * 100) / 100,
-    leave_pct: Math.round((d.leave_pct ?? d.churn_pct ?? 0) * 100) / 100,
+    "Propensity %": Math.round((d.propensity ?? 0) * 100 * 10) / 10,
+    "Churn %": Math.round((d.churn_pct ?? 0) * 10) / 10,
+    n: d.n || 0,
   }));
 
   return (
@@ -23,9 +23,8 @@ export default function CohortChart({ title, subtitle, data }) {
           <YAxis tick={{ fontSize: 11, fill: "var(--g500)" }} unit="%" />
           <Tooltip contentStyle={{ background: "var(--bg)", border: "1px solid var(--g200)", borderRadius: 8, fontSize: 12 }} />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Bar dataKey="buy_pct" name="Buy %" fill="var(--green)" radius={[4,4,0,0]} />
-          <Bar dataKey="hold_pct" name="Hold %" fill="var(--yellow)" radius={[4,4,0,0]} />
-          <Bar dataKey="leave_pct" name="Leave %" fill="var(--red)" radius={[4,4,0,0]} />
+          <Bar dataKey="Propensity %" fill="#4f8cff" radius={[4,4,0,0]} />
+          <Bar dataKey="Churn %" fill="#ff6b6b" radius={[4,4,0,0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

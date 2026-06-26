@@ -41,7 +41,7 @@ export default function VerdictGauge({ results, onReset }) {
           {verdictIcon} {verdictLabel}
         </div>
         {onReset && (
-          <button className="act-btn ghost" onClick={onReset} style={{ fontSize: 13 }}>↺ Reset</button>
+          <button onClick={onReset} style={{ fontSize: 12, padding: "4px 12px", border: "1px solid var(--g300)", borderRadius: 6, background: "var(--g50)", color: "var(--g600)", cursor: "pointer", fontWeight: 500 }}>↺ Reset</button>
         )}
       </div>
 

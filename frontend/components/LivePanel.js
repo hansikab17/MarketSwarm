@@ -6,9 +6,11 @@ function fmtClock(s) {
   return `${m}:${ss < 10 ? "0" : ""}${ss}`;
 }
 
-export default function LivePanel({ run, config, agents }) {
+export default function LivePanel({ run, config, agents, liveVotes, customerVotes, onTimerEnd }) {
   const total = config?.count || 500;
   const humanPct = config?.humanPct ?? 0;
+  const expectedHumans = Math.max(1, Math.round(total * humanPct / 100));
+  const humanTotal = (liveVotes?.yes || 0) + (liveVotes?.unsure || 0) + (liveVotes?.never || 0);
   const WAIT_SECONDS = 600; // 10-minute window for human survey responses
 
   const [secondsLeft, setSecondsLeft] = useState(WAIT_SECONDS);
@@ -42,7 +44,10 @@ export default function LivePanel({ run, config, agents }) {
       const elapsed = Math.floor((Date.now() - startRef.current) / 1000);
       const remaining = Math.max(0, WAIT_SECONDS - elapsed);
       setSecondsLeft(remaining);
-      if (remaining <= 0) clearInterval(timerRef.current);
+      if (remaining <= 0) {
+        clearInterval(timerRef.current);
+        if (onTimerEnd) onTimerEnd();
+      }
     }, 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
@@ -61,13 +66,15 @@ export default function LivePanel({ run, config, agents }) {
 
   useEffect(() => {
     if (!dotWrapRef.current) return;
+    const el = dotWrapRef.current;
     const measure = () => {
-      const w = dotWrapRef.current.clientWidth;
+      if (!el) return;
+      const w = el.clientWidth;
       if (w > 0) setDotContainerW(w);
     };
     measure();
     const ro = new ResizeObserver(measure);
-    ro.observe(dotWrapRef.current);
+    ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
@@ -92,30 +99,32 @@ export default function LivePanel({ run, config, agents }) {
   }, [dotCount, dotContainerW]);
 
   // Dots from real agent data — appear live as responses come in
+  // Override color when a human vote is received via BroadcastChannel
   const agentDots = useMemo(() => {
+    const votes = customerVotes || {};
     return agentList.map((a, i) => {
-      const color = a.predicted_action === "buy" ? "var(--green)"
-        : a.predicted_action === "hold" ? "var(--yellow)" : "var(--red)";
-      return { key: a.customer_id || `a-${i}`, color };
+      const vote = votes[a.customer_id];
+      const effectiveAction = vote
+        ? (vote === "yes" ? "buy" : vote === "never" ? "never" : "not sure")
+        : a.predicted_action;
+      const color = effectiveAction === "buy" ? "var(--green)"
+        : effectiveAction === "hold" ? "var(--yellow)" : "var(--red)";
+      const name = a.name || a.customer_id || `Agent ${i + 1}`;
+      const tooltip = `${name}\n${a.gender || ""}${a.age ? " · Age " + a.age : ""}\nDecision: ${effectiveAction}${vote ? " (human)" : ""}`;
+      return { key: a.customer_id || `a-${i}`, color, tooltip };
     });
-  }, [agentList]);
+  }, [agentList, customerVotes]);
 
   return (
     <div className="card" style={{ padding: 24, animation: "pop .4s ease both" }}>
       {/* Header + countdown timer */}
       <div className="live-head">
         <div>
-          <div style={{ fontSize: 15.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="swarm-t">
             <span style={{ color: "var(--blue)" }}>⏱</span> Collecting responses (live)
           </div>
-          <div style={{ fontSize: 12.5, color: "var(--g500)", marginTop: 3 }}>
-            {humanPct > 0
-              ? (agentsDone >= total
-                ? `Agent responses complete · waiting for human survey responses (${fmtClock(secondsLeft)} remaining)`
-                : `${agentsDone.toLocaleString()} of ${total.toLocaleString()} agents responded · human survey window open`)
-              : (agentsDone > 0
-                ? `${agentsDone.toLocaleString()} of ${total.toLocaleString()} agents responded`
-                : "Waiting for first agent response from Lambda...")}
+          <div className="swarm-s">
+            Agents + humans · updating every 5s · step {agentsDone} of {total}
           </div>
         </div>
         <div className="timer-pill">{fmtClock(secondsLeft)}</div>
@@ -126,20 +135,16 @@ export default function LivePanel({ run, config, agents }) {
         <div className="progbar-fill" style={{ width: `${(progress * 100).toFixed(1)}%`, transition: "width 0.4s ease" }} />
       </div>
 
-      {/* Live metric tiles */}
+      {/* Live metric tiles — agent stats only */}
       <div className="live-metrics">
-        <LiveTile label="Responses in" value={`${agentsDone.toLocaleString()} / ${total.toLocaleString()}`} color="var(--blue)" />
+        <LiveTile label="Agents responded" value={agentsDone.toLocaleString()} color="var(--blue)" />
         <LiveTile label="Running buy-rate" value={agentsDone > 0 ? `${liveBuyRate}%` : "—"} color="var(--green)" />
         <LiveTile label="Predicted buyers" value={buyCount.toLocaleString()} color="var(--g900)" />
         <LiveTile label="Progress" value={`${Math.round(progress * 100)}%`} color="var(--yellow)" />
       </div>
 
-      {/* Growing dot canvas — dots appear live as agents respond */}
-      <div style={{ fontSize: 12, color: "var(--g500)", marginTop: 14 }}>
-        {agentsDone > 0
-          ? "Live swarm — each dot is a real agent response"
-          : "Waiting for agent responses to populate swarm..."}
-      </div>
+      {/* Growing dot canvas — agent swarm only */}
+      <div className="swarm-s" style={{ marginTop: 6 }}>Agent swarm — dots appear as agents respond</div>
       <div ref={dotWrapRef} style={{ width: "100%", height: LIVE_DOT_H, overflow: "hidden", marginTop: 8 }}>
         {dotContainerW > 0 && (
           <div
@@ -153,7 +158,7 @@ export default function LivePanel({ run, config, agents }) {
             }}
           >
             {agentDots.map((d, i) => (
-              <span key={d.key} className="dot dotpop" style={{ background: d.color, width: dotSize, height: dotSize, borderRadius: "50%", animationDelay: `${(i % 30) * 0.02}s` }} />
+              <span key={d.key} className="dot dotpop" title={d.tooltip} style={{ background: d.color, width: dotSize, height: dotSize, borderRadius: "50%", animationDelay: `${(i % 30) * 0.02}s`, cursor: "pointer" }} />
             ))}
             {!isDone && (
               <span style={{ background: "var(--g300)", width: dotSize, height: dotSize, borderRadius: "50%", animation: "slowpulse 2s ease-in-out infinite" }} />
@@ -162,20 +167,16 @@ export default function LivePanel({ run, config, agents }) {
         )}
       </div>
 
-      {/* Legend */}
-      <div style={{ display: "flex", gap: 18, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <LegendItem color="var(--green)" label="Buy" count={buyCount} />
-        <LegendItem color="var(--yellow)" label="Hold" count={holdCount} />
-        <LegendItem color="var(--red)" label="Leave" count={leaveCount} />
-        <div style={{ marginLeft: "auto", fontSize: 12, color: "var(--g500)" }}>
-          {fmtClock(secondsLeft)} remaining
-        </div>
+      {/* Human vote tally — matching reference live-tally chips */}
+      <div className="live-tally">
+        <TallyChip color="var(--green)" label="Yes, will buy" count={liveVotes?.yes || 0} />
+        <TallyChip color="var(--yellow)" label="Not sure" count={liveVotes?.unsure || 0} />
+        <TallyChip color="var(--red)" label="Never" count={liveVotes?.never || 0} />
+        <span className="tally-meta">{humanTotal} / ~{expectedHumans} human responses</span>
       </div>
 
       <div className="note" style={{ marginTop: 12 }}>
-        {humanPct > 0
-          ? "Agent predictions appear live. The 10-minute window allows human survey responses to arrive. When the timer ends or you press \"Finish now\", agent + human responses are blended for the final prediction."
-          : "Agent predictions appear live. Press \"Finish now\" to see the final verdict, or wait for all agents to respond."}
+        Results refresh every few seconds as more agent and human responses arrive. The countdown steps down over the 10-minute window — press &quot;Finish now&quot; to stop early.
       </div>
     </div>
   );
@@ -190,11 +191,12 @@ function LiveTile({ label, value, color }) {
   );
 }
 
-function LegendItem({ color, label, count }) {
+function TallyChip({ color, label, count }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "var(--g700)" }}>
+    <div className="tally-chip" style={{ borderColor: color }}>
       <span className="legend-dot" style={{ background: color }} />
-      <span>{count}</span> <span>{label}</span>
+      <span style={{ fontWeight: 700, color: "var(--g900)" }}>{count}</span>
+      <span style={{ color: "var(--g700)" }}>{label}</span>
     </div>
   );
 }

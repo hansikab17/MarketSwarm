@@ -72,3 +72,21 @@ export async function backtest(sampleSize = 1000) {
     body: JSON.stringify({ sample_size: sampleSize }),
   });
 }
+
+export async function reconcileRun(runId, votes) {
+  return apiFetch(`/api/runs/${runId}/reconcile`, {
+    method: "POST",
+    body: JSON.stringify({ votes }),
+  });
+}
+
+export async function submitVote(runId, customerId, vote, customerName = "") {
+  return apiFetch(`/api/runs/${runId}/votes/${customerId}`, {
+    method: "POST",
+    body: JSON.stringify({ vote, customer_name: customerName }),
+  });
+}
+
+export async function getVotes(runId) {
+  return apiFetch(`/api/runs/${runId}/votes`);
+}

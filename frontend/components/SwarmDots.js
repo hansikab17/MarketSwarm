@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 
-export default function SwarmDots({ agents, totalAgents }) {
+export default function SwarmDots({ agents, totalAgents, customerVotes }) {
   const [mode, setMode] = useState("decision");
+  const [hovered, setHovered] = useState(null);
   const total = totalAgents || agents.length;
   const count = agents.length;
   const wrapRef = useRef(null);
@@ -45,16 +46,23 @@ export default function SwarmDots({ agents, totalAgents }) {
   }, [count, containerW]);
 
   const dots = useMemo(() => {
+    const votes = customerVotes || {};
     return agents.map((a, i) => {
+      const vote = votes[a.customer_id];
+      const effectiveAction = vote
+        ? (vote === "yes" ? "buy" : vote === "never" ? "leave" : "hold")
+        : a.predicted_action;
       let color;
       if (mode === "decision") {
-        color = a.predicted_action === "buy" ? "var(--green)" : a.predicted_action === "hold" ? "var(--yellow)" : "var(--red)";
+        color = effectiveAction === "buy" ? "var(--green)" : effectiveAction === "hold" ? "var(--yellow)" : "var(--red)";
       } else {
         color = a.gender === "Female" ? "var(--accent)" : "var(--accent2)";
       }
-      return { color, key: a.customer_id || i };
+      const name = a.name || a.customer_id || `Agent ${i + 1}`;
+      const tooltip = `${name}\n${a.gender || ""}${a.age ? " · Age " + a.age : ""}\nDecision: ${effectiveAction}${vote ? " (human)" : ""}`;
+      return { color, key: a.customer_id || i, tooltip, idx: i };
     });
-  }, [agents, mode]);
+  }, [agents, mode, customerVotes]);
 
   return (
     <div className="card" style={{ padding: 28 }}>
@@ -83,7 +91,23 @@ export default function SwarmDots({ agents, totalAgents }) {
             }}
           >
             {dots.map((d) => (
-              <span key={d.key} style={{ background: d.color, width: dotSize, height: dotSize, borderRadius: "50%", display: "block" }} />
+              <span
+                key={d.key}
+                title={d.tooltip}
+                onMouseEnter={() => setHovered(d.idx)}
+                onMouseLeave={() => setHovered(null)}
+                style={{
+                  background: d.color,
+                  width: dotSize,
+                  height: dotSize,
+                  borderRadius: "50%",
+                  display: "block",
+                  cursor: "pointer",
+                  outline: hovered === d.idx ? "2px solid var(--g900)" : "none",
+                  outlineOffset: 1,
+                  transition: "outline 0.1s",
+                }}
+              />
             ))}
           </div>
         )}
@@ -92,14 +116,14 @@ export default function SwarmDots({ agents, totalAgents }) {
       <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 12, color: "var(--g500)" }}>
         {mode === "decision" ? (
           <>
-            <span><span className="legend-dot" style={{ background: "var(--green)" }} /> Buy</span>
-            <span><span className="legend-dot" style={{ background: "var(--yellow)" }} /> Hold</span>
-            <span><span className="legend-dot" style={{ background: "var(--red)" }} /> Leave</span>
+            <span><span className="legend-dot" style={{ background: "var(--green)" }} /> Buy: {dots.filter(d => d.color === "var(--green)").length}</span>
+            <span><span className="legend-dot" style={{ background: "var(--yellow)" }} /> Hold: {dots.filter(d => d.color === "var(--yellow)").length}</span>
+            <span><span className="legend-dot" style={{ background: "var(--red)" }} /> Leave: {dots.filter(d => d.color === "var(--red)").length}</span>
           </>
         ) : (
           <>
-            <span><span className="legend-dot" style={{ background: "var(--accent)" }} /> Female</span>
-            <span><span className="legend-dot" style={{ background: "var(--accent2)" }} /> Male</span>
+            <span><span className="legend-dot" style={{ background: "var(--accent)" }} /> Female: {agents.filter(a => a.gender === "Female").length}</span>
+            <span><span className="legend-dot" style={{ background: "var(--accent2)" }} /> Male: {agents.filter(a => a.gender === "Male").length}</span>
           </>
         )}
       </div>
