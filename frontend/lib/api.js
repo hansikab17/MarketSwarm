@@ -43,10 +43,10 @@ export async function getScenario(id) {
   return apiFetch(`/api/scenarios/${id}`);
 }
 
-export async function startRun(scenarioId, sampleSize = 5000, humanPct = 0) {
+export async function startRun(scenarioId, sampleSize = 5000, humanPct = 0, ragScenarioId = "") {
   return apiFetch("/api/runs", {
     method: "POST",
-    body: JSON.stringify({ scenario_id: scenarioId, sample_size: sampleSize, human_pct: humanPct }),
+    body: JSON.stringify({ scenario_id: scenarioId, sample_size: sampleSize, human_pct: humanPct, rag_scenario_id: ragScenarioId }),
   });
 }
 
@@ -89,4 +89,85 @@ export async function submitVote(runId, customerId, vote, customerName = "") {
 
 export async function getVotes(runId) {
   return apiFetch(`/api/runs/${runId}/votes`);
+}
+
+// --- Raaga RAG ---
+
+export async function uploadRaagaDocs(scenarioId, files) {
+  const formData = new FormData();
+  formData.append("scenario_id", scenarioId);
+  files.forEach((f, i) => formData.append(`file_${i}`, f));
+  const url = `${API_BASE}/api/raaga/documents`;
+  const res = await fetch(url, { method: "POST", body: formData });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || data.error || `Upload error ${res.status}`);
+  return data;
+}
+
+export async function uploadRaagaDocsJson(scenarioId, documents) {
+  return apiFetch("/api/raaga/documents", {
+    method: "POST",
+    body: JSON.stringify({ scenario_id: scenarioId, documents }),
+  });
+}
+
+export async function listRaagaDocs(scenarioId) {
+  return apiFetch(`/api/raaga/documents/${scenarioId}`);
+}
+
+export async function deleteRaagaDoc(scenarioId, docId) {
+  return apiFetch(`/api/raaga/documents/${scenarioId}/${docId}`, { method: "DELETE" });
+}
+
+export async function buildRaagaIndex(scenarioId) {
+  return apiFetch("/api/raaga/build", {
+    method: "POST",
+    body: JSON.stringify({ scenario_id: scenarioId }),
+  });
+}
+
+export async function askRaaga(scenarioId, question, productName) {
+  return apiFetch("/api/raaga/ask", {
+    method: "POST",
+    body: JSON.stringify({ scenario_id: scenarioId, question, product_name: productName }),
+  });
+}
+
+// --- AWS internals metrics ---
+
+export async function getAwsMetrics(minutes = 180) {
+  return apiFetch(`/api/metrics/aws?minutes=${minutes}`);
+}
+
+// --- Page-view hit counter (Vercel frontend traffic) ---
+
+export async function getHits(minutes = 60) {
+  return apiFetch(`/api/hits?minutes=${minutes}`);
+}
+
+/**
+ * Fire a page-view beacon. Non-blocking, no auth, tiny payload.
+ * Uses navigator.sendBeacon when available so it survives navigation.
+ */
+export function recordHit(path) {
+  if (typeof window === "undefined") return;
+  const url = `${API_BASE}/api/hits/beacon`;
+  const body = JSON.stringify({
+    path: path || window.location.pathname,
+    referrer: document.referrer || "",
+  });
+  try {
+    if (navigator.sendBeacon) {
+      const blob = new Blob([body], { type: "application/json" });
+      navigator.sendBeacon(url, blob);
+      return;
+    }
+  } catch (_) { /* fall through */ }
+  // Fallback
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+    keepalive: true,
+  }).catch(() => {});
 }

@@ -19,6 +19,10 @@ a:hover { text-decoration:underline; }
 .nav-link { border:none; background:transparent; color:var(--g700); border-radius:999px; padding:9px 16px; font-size:14px; font-weight:600; cursor:pointer; transition:all .15s; text-decoration:none; font-family:inherit; }
 .nav-link:hover { background:var(--g100); text-decoration:none; }
 .nav-link.active { background:#e8f0fe; color:var(--blue-dark); }
+.nav-live { display:inline-flex; align-items:center; gap:7px; }
+.nav-live.active { background:var(--green-l); color:#146c2e; }
+.nav-live-dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 0 0 rgba(30,142,62,.5); animation:navpulse 1.8s infinite; }
+@keyframes navpulse { 0%{box-shadow:0 0 0 0 rgba(30,142,62,.5);} 70%{box-shadow:0 0 0 7px rgba(30,142,62,0);} 100%{box-shadow:0 0 0 0 rgba(30,142,62,0);} }
 .nav-sep { width:1px; height:24px; background:var(--g300); margin:0 6px; }
 .pill-btn { display:flex; align-items:center; gap:8px; border:1px solid var(--g300); background:var(--white); border-radius:999px; padding:9px 16px; font-size:13.5px; font-weight:600; color:var(--blue); cursor:pointer; font-family:inherit; }
 .pill-btn:hover { background:#f6faff; }
@@ -53,6 +57,13 @@ a:hover { text-decoration:underline; }
   border:1.5px solid var(--g300); background:#fff; color:var(--g900); transition:all .15s; }
 .act-btn.config { border-color:#1a73e8; color:#1558b0; background:#f2f7ff; }
 .act-btn.config:hover { background:#e8f0fe; }
+.seg-control { display:flex; padding:4px; gap:4px; background:var(--g100,#eef1f6); border:1px solid var(--g200,#dfe3ea); border-radius:12px; }
+.seg-item { flex:1; display:flex; align-items:center; justify-content:center; gap:8px;
+  padding:10px 12px; border:none; border-radius:9px; background:transparent; cursor:pointer;
+  font-family:inherit; font-size:13.5px; font-weight:600; color:var(--g600,#5f6368);
+  transition:background .15s, color .15s, box-shadow .15s; white-space:nowrap; }
+.seg-item:hover[data-active="0"] { background:rgba(26,115,232,.08); color:var(--g900,#202124); }
+.seg-item[data-active="1"] { background:#fff; color:#1558b0; box-shadow:0 1px 3px rgba(60,64,67,.18); }
 .act-btn.run { border:none; background:#1a73e8; color:#fff; box-shadow:0 1px 3px rgba(26,115,232,.5); }
 .act-btn.run:hover { background:#1558b0; }
 .act-btn.run.disabled { background:var(--g300); color:#fff; box-shadow:none; cursor:default; }
@@ -156,7 +167,7 @@ input[type=range]::-moz-range-thumb { width:16px; height:16px; border-radius:50%
 .ballot-opt { display:flex; align-items:center; gap:9px; border:1.5px solid var(--g300); border-radius:10px; padding:10px 13px; font-size:14px; font-weight:600; color:var(--g900); }
 
 /* Config modal */
-.cfg-modal { width:82vw; max-width:1280px; min-width:auto; }
+.modal.cfg-modal { width:82vw; max-width:1280px; min-width:auto; overflow:hidden; }
 .cfg-body { padding:20px 28px 8px; overflow-y:auto; max-height:66vh; }
 .cfg-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 36px; }
 .cfg-col { min-width:0; }
@@ -362,8 +373,8 @@ input[type=range]::-moz-range-thumb { width:16px; height:16px; border-radius:50%
 /* Manager dock — FAB + floating panel */
 .mgr-dock {
     position: fixed;
-    right: -37px;
-    bottom: -77px;
+    right: -185px;
+    bottom: -50px;
     z-index: 60;
 }
 .mgr-fab { width:56px; height:56px; border-radius:50%; border:none; cursor:pointer; position:relative;

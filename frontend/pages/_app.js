@@ -2,6 +2,7 @@ import "@/styles/globals.css";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useState, useEffect } from "react";
+import { recordHit } from "@/lib/api";
 
 const DATA_PARAMS = [
   ["🛒", "Transactions & purchases", "Frequency, recency, value, channel and basket mix — the backbone of spend behaviour."],
@@ -18,29 +19,21 @@ export default function App({ Component, pageProps }) {
   const router = useRouter();
   const path = router.pathname;
   const [showInfo, setShowInfo] = useState(false);
-  const [surveyOpen, setSurveyOpen] = useState(false);
-  const [surveyData, setSurveyData] = useState({ runId: null, customers: [], votes: {} });
   const isSimulator = path === "/simulator";
 
-  // Listen for survey data broadcasts from simulator
   useEffect(() => {
-    let bc;
-    try { bc = new BroadcastChannel("market-swarm-bus"); } catch (_) { return; }
-    function handler(ev) {
-      const m = ev.data || {};
-      if (m.type === "survey-links-update") {
-        setSurveyData({ runId: m.runId, customers: m.customers || [], votes: m.votes || {} });
-      }
-    }
-    bc.onmessage = handler;
-    return () => { bc.close(); };
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === "Escape") { setShowInfo(false); setSurveyOpen(false); } };
+    const onKey = (e) => { if (e.key === "Escape") { setShowInfo(false); } };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // Page-view beacon: fire once on first load and on every client-side route change.
+  useEffect(() => {
+    recordHit(router.asPath);
+    const onChange = (url) => recordHit(url);
+    router.events.on("routeChangeComplete", onChange);
+    return () => router.events.off("routeChangeComplete", onChange);
+  }, [router.events]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -58,68 +51,14 @@ export default function App({ Component, pageProps }) {
         </Link>
         <nav className="nav">
           <Link href="/" className={`nav-link${path === "/" ? " active" : ""}`}>Home</Link>
-          <Link href="/simulator" className={`nav-link${isSimulator ? " active" : ""}`}>Simulator</Link>
+          <Link href="/simulator" className={`nav-link${isSimulator ? " active" : ""}`}>MarketSwarm</Link>
+          <Link href="/internals" className={`nav-link nav-live${path === "/internals" ? " active" : ""}`}>
+            <span className="nav-live-dot" /> Live demo
+          </Link>
           <Link href="/contact" className={`nav-link${path === "/contact" ? " active" : ""}`}>Contact us</Link>
           {isSimulator && (
             <>
               <span className="nav-sep" />
-              <div style={{ position: "relative" }}>
-                <button className="pill-btn" onClick={() => setSurveyOpen(p => !p)} style={{ gap: 8 }}>
-                  <span>🌐</span>
-                  Open Customer Surveys
-                  {surveyData.customers.length > 0 && (
-                    <span className="survey-links-badge">
-                      {Object.keys(surveyData.votes).length}/{surveyData.customers.length}
-                    </span>
-                  )}
-                  <span style={{ transform: surveyOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", fontSize: 12 }}>▾</span>
-                </button>
-                {surveyOpen && surveyData.customers.length > 0 && (
-                  <div className="survey-links-panel" style={{ top: "calc(100% + 8px)", right: 0 }}>
-                    <div className="survey-links-head">
-                      <span style={{ fontWeight: 700, fontSize: 14 }}>Survey links for this run</span>
-                      <span className="note">Share these with real users</span>
-                    </div>
-                    <div className="survey-links-list">
-                      {surveyData.customers.map((h, i) => {
-                        const voted = surveyData.votes[h.customer_id];
-                        const url = `/survey?runId=${surveyData.runId}&custId=${h.customer_id}&name=${encodeURIComponent(h.name || h.customer_id)}&gender=${encodeURIComponent(h.gender || "")}`;
-                        return (
-                          <div key={h.customer_id} className="survey-link-row">
-                            <span className="survey-link-num">{i + 1}</span>
-                            <span className="survey-link-avatar" style={{ background: h.gender === "Female" ? "#ea4c89" : "var(--blue)" }}>
-                              {(h.name || h.customer_id).charAt(0)}
-                            </span>
-                            <div className="survey-link-info">
-                              <div className="survey-link-name">{h.name || h.customer_id}</div>
-                              <div className="survey-link-id">{h.customer_id}</div>
-                            </div>
-                            {voted ? (
-                              <span className="survey-link-status done">✓ {voted}</span>
-                            ) : (
-                              <span className="survey-link-status pending">pending</span>
-                            )}
-                            <a href={url} target="_blank" rel="noopener noreferrer" className="survey-link-open" title="Open survey">↗</a>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <button className="survey-links-openall" onClick={() => {
-                      surveyData.customers.forEach(h => {
-                        const url = `/survey?runId=${surveyData.runId}&custId=${h.customer_id}&name=${encodeURIComponent(h.name || h.customer_id)}&gender=${encodeURIComponent(h.gender || "")}`;
-                        window.open(url, "_blank");
-                      });
-                    }}>
-                      Open all {surveyData.customers.length} surveys in new tabs
-                    </button>
-                  </div>
-                )}
-                {surveyOpen && surveyData.customers.length === 0 && (
-                  <div className="survey-links-panel" style={{ top: "calc(100% + 8px)", right: 0, padding: 20, textAlign: "center" }}>
-                    <div style={{ fontSize: 13, color: "var(--g500)" }}>No active run. Start a simulation first to generate survey links.</div>
-                  </div>
-                )}
-              </div>
               <button className="pill-btn" onClick={() => setShowInfo(true)}>
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>

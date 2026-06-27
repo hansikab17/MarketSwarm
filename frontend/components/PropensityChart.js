@@ -26,16 +26,16 @@ export default function PropensityChart({ agents }) {
           <XAxis dataKey="range" tick={{ fontSize: 11, fill: "var(--g500)" }} />
           <YAxis tick={{ fontSize: 11, fill: "var(--g500)" }} />
           <Tooltip contentStyle={{ background: "var(--bg)", border: "1px solid var(--g200)", borderRadius: 8, fontSize: 12 }} />
-          <Area type="monotone" dataKey="buy" stackId="1" stroke="var(--green)" fill="var(--green-l)" />
-          <Area type="monotone" dataKey="hold" stackId="1" stroke="var(--yellow)" fill="var(--yellow-l)" />
-          <Area type="monotone" dataKey="leave" stackId="1" stroke="var(--red)" fill="var(--red-l)" />
+          <Area type="monotone" dataKey="buy" name="Buy" stackId="1" stroke="var(--green)" fill="var(--green-l)" />
+          <Area type="monotone" dataKey="hold" name="Not sure" stackId="1" stroke="var(--yellow)" fill="var(--yellow-l)" />
+          <Area type="monotone" dataKey="leave" name="Never" stackId="1" stroke="var(--red)" fill="var(--red-l)" />
         </AreaChart>
       </ResponsiveContainer>
 
       <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 12, color: "var(--g500)" }}>
         <span><span className="legend-dot" style={{ background: "var(--green)" }} /> Buy</span>
-        <span><span className="legend-dot" style={{ background: "var(--yellow)" }} /> Hold</span>
-        <span><span className="legend-dot" style={{ background: "var(--red)" }} /> Leave</span>
+        <span><span className="legend-dot" style={{ background: "var(--yellow)" }} /> Not sure</span>
+        <span><span className="legend-dot" style={{ background: "var(--red)" }} /> Never</span>
       </div>
     </div>
   );

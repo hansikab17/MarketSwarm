@@ -109,7 +109,7 @@ export default function LivePanel({ run, config, agents, liveVotes, customerVote
         : a.predicted_action;
       const color = effectiveAction === "buy" ? "var(--green)"
         : effectiveAction === "hold" ? "var(--yellow)" : "var(--red)";
-      const name = a.name || a.customer_id || `Agent ${i + 1}`;
+      const name = [a.name, a.customer_id].filter(Boolean).join(" ") || `Agent ${i + 1}`;
       const tooltip = `${name}\n${a.gender || ""}${a.age ? " · Age " + a.age : ""}\nDecision: ${effectiveAction}${vote ? " (human)" : ""}`;
       return { key: a.customer_id || `a-${i}`, color, tooltip };
     });

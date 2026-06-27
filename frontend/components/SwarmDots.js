@@ -49,17 +49,18 @@ export default function SwarmDots({ agents, totalAgents, customerVotes }) {
     const votes = customerVotes || {};
     return agents.map((a, i) => {
       const vote = votes[a.customer_id];
-      const effectiveAction = vote
-        ? (vote === "yes" ? "buy" : vote === "never" ? "leave" : "hold")
+      const rawAction = vote
+        ? (vote === "yes" ? "buy" : vote === "never" ? "never" : "not sure")
         : a.predicted_action;
+      const label = rawAction === "buy" ? "buy" : (rawAction === "hold" || rawAction === "not sure") ? "not sure" : "never";
       let color;
       if (mode === "decision") {
-        color = effectiveAction === "buy" ? "var(--green)" : effectiveAction === "hold" ? "var(--yellow)" : "var(--red)";
+        color = label === "buy" ? "var(--green)" : label === "not sure" ? "var(--yellow)" : "var(--red)";
       } else {
         color = a.gender === "Female" ? "var(--accent)" : "var(--accent2)";
       }
-      const name = a.name || a.customer_id || `Agent ${i + 1}`;
-      const tooltip = `${name}\n${a.gender || ""}${a.age ? " · Age " + a.age : ""}\nDecision: ${effectiveAction}${vote ? " (human)" : ""}`;
+      const name = [a.name, a.customer_id].filter(Boolean).join(" ") || `Agent ${i + 1}`;
+      const tooltip = `${name}\n${a.gender || ""}${a.age ? " · Age " + a.age : ""}\nDecision: ${label}${vote ? " (human)" : ""}`;
       return { color, key: a.customer_id || i, tooltip, idx: i };
     });
   }, [agents, mode, customerVotes]);
@@ -117,8 +118,8 @@ export default function SwarmDots({ agents, totalAgents, customerVotes }) {
         {mode === "decision" ? (
           <>
             <span><span className="legend-dot" style={{ background: "var(--green)" }} /> Buy: {dots.filter(d => d.color === "var(--green)").length}</span>
-            <span><span className="legend-dot" style={{ background: "var(--yellow)" }} /> Hold: {dots.filter(d => d.color === "var(--yellow)").length}</span>
-            <span><span className="legend-dot" style={{ background: "var(--red)" }} /> Leave: {dots.filter(d => d.color === "var(--red)").length}</span>
+            <span><span className="legend-dot" style={{ background: "var(--yellow)" }} /> Not sure: {dots.filter(d => d.color === "var(--yellow)").length}</span>
+            <span><span className="legend-dot" style={{ background: "var(--red)" }} /> Never: {dots.filter(d => d.color === "var(--red)").length}</span>
           </>
         ) : (
           <>

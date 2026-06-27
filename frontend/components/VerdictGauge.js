@@ -77,6 +77,8 @@ export default function VerdictGauge({ results, onReset }) {
           </div>
         </div>
       </div>
+
+      {results?.harness && <HarnessBand harness={results.harness} />}
     </div>
   );
 }
@@ -87,6 +89,33 @@ function StatBlock({ label, value, sub, color }) {
       <div style={{ fontSize: 12, color: "var(--g500)", marginBottom: 4 }}>{label}</div>
       <div style={{ fontSize: 24, fontWeight: 800, color: color || "var(--g900)", lineHeight: 1.1 }}>{value}</div>
       {sub && <div style={{ fontSize: 12, color: "var(--g400)", marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function HarnessBand({ harness }) {
+  const lo = Math.round((harness.buy_rate_ci95?.[0] ?? 0) * 100);
+  const hi = Math.round((harness.buy_rate_ci95?.[1] ?? 0) * 100);
+  const mid = Math.round((harness.buy_rate ?? 0) * 100);
+  return (
+    <div style={{ marginTop: 24, padding: "14px 16px", background: "var(--g50, #f8f9fb)", border: "1px solid var(--border)", borderRadius: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 15 }}>🔁</span>
+        <span style={{ fontWeight: 700, fontSize: 14 }}>Harness confidence</span>
+        <span style={{ fontSize: 12, color: "var(--g500)" }}>{harness.loops}× loops on {(harness.sample_size ?? 0).toLocaleString()} sampled customers</span>
+      </div>
+      <div style={{ display: "flex", gap: 36, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 12, color: "var(--g500)", marginBottom: 4 }}>Buy-rate (95% CI)</div>
+          <div style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.1 }}>{mid}% <span style={{ fontSize: 14, fontWeight: 600, color: "var(--g500)" }}>±{harness.margin_pct}%</span></div>
+          <div style={{ fontSize: 11.5, color: "var(--g400)", marginTop: 2 }}>ranges {lo}%–{hi}%</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, color: "var(--g500)", marginBottom: 4 }}>Fence-sitters</div>
+          <div style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.1, color: "var(--yellow, #b06000)" }}>{(harness.fence_sitters ?? 0).toLocaleString()}</div>
+          <div style={{ fontSize: 11.5, color: "var(--g400)", marginTop: 2 }}>{harness.fence_sitter_pct}% flip between loops</div>
+        </div>
+      </div>
     </div>
   );
 }

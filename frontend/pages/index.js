@@ -8,7 +8,7 @@ export default function Home() {
         <h1>Test any launch against a <span className="grad">swarm of synthetic customers</span></h1>
         <p>Market Swarm simulates thousands of data-grounded customers so you can predict whether a new product will succeed or fail — before spending a rupee on live experiments.</p>
         <div className="land-cta">
-          <Link href="/simulator" className="btn-primary" style={{ textDecoration: "none" }}>▶ Launch the simulator</Link>
+          <Link href="/simulator" className="btn-primary" style={{ textDecoration: "none" }}>▶ Start MarketSwarm</Link>
           <Link href="/contact" className="btn-ghost" style={{ textDecoration: "none" }}>✉ Contact us</Link>
         </div>
       </div>
@@ -58,7 +58,7 @@ export default function Home() {
       <div className="land-final">
         <h2>Ready to see your launch through the swarm?</h2>
         <p>No setup, no data upload. Open the simulator and run your first scenario in seconds.</p>
-        <Link href="/simulator" className="btn-primary" style={{ textDecoration: "none" }}>▶ Launch the simulator</Link>
+        <Link href="/simulator" className="btn-primary" style={{ textDecoration: "none" }}>▶ Start MarketSwarm</Link>
       </div>
     </div>
   );

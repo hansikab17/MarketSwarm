@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/router";
 import { getBus, busPost } from "@/lib/swarmBus";
-import { submitVote } from "@/lib/api";
+import { submitVote, getRun } from "@/lib/api";
 import RaagaPanel from "@/components/RaagaPanel";
 
 export default function SurveyPage() {
@@ -19,11 +19,35 @@ export default function SurveyPage() {
   const [isClosed, setIsClosed] = useState(false);
   const [humanAnswers, setHumanAnswers] = useState([]);
   const [currentRunId, setCurrentRunId] = useState(runIdParam);
+  const [currentScenarioId, setCurrentScenarioId] = useState("");
 
   // Keep runId in sync when query param changes
   useEffect(() => {
     if (runIdParam) setCurrentRunId(runIdParam);
   }, [runIdParam]);
+
+  // Authoritatively close when the backend run has ended (covers finish / timer
+  // expiry even if the BroadcastChannel "survey-closed" message is missed).
+  useEffect(() => {
+    const rid = runIdParam || currentRunId;
+    if (!rid || isClosed) return;
+    let stopped = false;
+    const check = async () => {
+      try {
+        const data = await getRun(rid);
+        if (stopped || !data) return;
+        // Server-authoritative RAG scenario id — works across devices, refreshes,
+        // and missed BroadcastChannel messages (no localStorage needed).
+        if (data.rag_scenario_id) setCurrentScenarioId((prev) => prev || data.rag_scenario_id);
+        if (data.status === "done" || data.status === "failed") {
+          setIsClosed(true);
+        }
+      } catch (_) { /* ignore transient errors */ }
+    };
+    check();
+    const id = setInterval(check, 5000);
+    return () => { stopped = true; clearInterval(id); };
+  }, [runIdParam, currentRunId, isClosed]);
 
   // BroadcastChannel: listen for product-sync, run-started, human-answer
   useEffect(() => {
@@ -37,8 +61,10 @@ export default function SurveyPage() {
       const m = ev.data || {};
       if (m.type === "product-sync" && m.product) {
         setProduct({ name: m.product.name || "", desc: m.product.desc || "", img: m.product.img || null, doc: m.product.doc || "" });
+        if (m.scenarioId) setCurrentScenarioId(m.scenarioId);
       } else if (m.type === "run-started") {
         if (m.product) setProduct({ name: m.product.name || "", desc: m.product.desc || "", img: m.product.img || null, doc: m.product.doc || "" });
+        if (m.scenarioId) setCurrentScenarioId(m.scenarioId);
         setCurrentVote(null);
         setIsSubmitted(false);
         setIsClosed(false);
@@ -191,6 +217,7 @@ export default function SurveyPage() {
         <RaagaPanel
           productName={product.name}
           productDoc={product.doc}
+          scenarioId={currentScenarioId}
           onEscalate={handleEscalate}
           humanAnswers={humanAnswers}
         />

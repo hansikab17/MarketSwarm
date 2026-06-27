@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { createScenario, startRun, getRun, getResults, getAgents, reconcileRun, getVotes } from "@/lib/api";
+import { createScenario, startRun, getRun, getResults, getAgents, reconcileRun, getVotes, uploadRaagaDocsJson, buildRaagaIndex } from "@/lib/api";
 import { getBus, busPost } from "@/lib/swarmBus";
 import ConfigModal from "@/components/ConfigModal";
 import SwarmDots from "@/components/SwarmDots";
@@ -9,6 +9,103 @@ import CohortChart from "@/components/CohortChart";
 import ReconcileCard from "@/components/ReconcileCard";
 import LivePanel from "@/components/LivePanel";
 import ManagerDock from "@/components/ManagerDock";
+import StrategyInsight from "@/components/StrategyInsight";
+
+const AURORABUDS_DOC = [
+  "AuroraBuds \u2014 Smart Sleep Earbuds \u00b7 Product Documentation",
+  "",
+  "OVERVIEW",
+  "AuroraBuds are wireless in-ear earbuds designed specifically for sleep, not music-first listening. They combine adaptive noise masking with gentle sleep-stage tracking to help light sleepers and travellers fall asleep faster and wake up more refreshed.",
+  "",
+  "KEY FEATURES",
+  "- Adaptive soundscapes: 20 built-in masking tracks (rain, brown noise, ocean, fan) that auto-adjust volume to cover sudden ambient noises like snoring or traffic.",
+  "- Sleep-stage tracking: on-board sensors estimate light, deep and REM stages and sync to the AuroraSleep app each morning.",
+  "- Smart alarm: wakes you during your lightest sleep phase within a 30-minute window so you feel less groggy.",
+  "- Comfort fit: featherlight 3.2g body with 4 silicone tip sizes, designed to stay put for side-sleepers.",
+  "- Battery: 9 hours continuous on a single charge; the charging case adds 3 full nights. USB-C, 10-min quick charge gives 2 hours.",
+  "",
+  "PRICE & AVAILABILITY",
+  "AuroraBuds retail at $89. Launch colours are Midnight and Mist. A 30-night risk-free trial is included, with free returns.",
+  "",
+  "COMFORT & SAFETY",
+  "The earbuds use low-volume masking capped at a sleep-safe level. They are sweat-resistant (IPX4) but not for swimming. Materials are hypoallergenic medical-grade silicone.",
+  "",
+  "WARRANTY & SUPPORT",
+  "Every pair includes a 1-year limited warranty covering manufacturing defects. Support is available via the app chat and email within 24 hours.",
+  "",
+  "WHO IT\u2019S FOR",
+  "Best for light sleepers, people with snoring partners, shift workers, and frequent travellers who struggle to sleep in noisy or unfamiliar places."
+].join("\n");
+
+const DEFAULT_RAG_DOCS = [{
+  doc_id: "default_aurorabuds",
+  name: "AuroraBuds \u2014 Product Documentation.txt",
+  content: AURORABUDS_DOC,
+  size: AURORABUDS_DOC.length,
+  isDefault: true,
+}];
+
+// Mirror of backend _build_strategy_insight for the early-finish (client-built) path.
+function buildStrategyInsight(strategy, items, cohorts, basePrice) {
+  const n = items.length;
+  if (!n) return null;
+
+  if (strategy === "price") {
+    const buy = items.filter(a => a.predicted_action === "buy").length;
+    const baseRate = buy / n;
+    const avgProp = items.reduce((s, a) => s + (a.propensity_to_buy || 0), 0) / n;
+    const elasticity = 1.6 - Math.min(1, Math.max(0, avgProp));
+    const price0 = Number(basePrice) || 0;
+    const points = [-20, -10, 0, 10, 20].map(delta => {
+      const price = +(price0 * (1 + delta / 100)).toFixed(2);
+      const demandMult = Math.max(0.05, 1 - elasticity * (delta / 100));
+      const rate = Math.max(0, Math.min(0.99, baseRate * demandMult));
+      const buyers = Math.round(rate * n);
+      return { delta, price, buy_rate: +rate.toFixed(4), buyers, revenue: +(price * buyers).toFixed(2), recommended: false };
+    });
+    const best = price0 > 0 ? points.reduce((a, b) => (b.revenue > a.revenue ? b : a)) : points[2];
+    best.recommended = true;
+    const sign = best.delta > 0 ? "+" : "";
+    return {
+      strategy: "price", title: "Optimal price for your launch",
+      summary: `Projected revenue peaks at $${best.price.toFixed(2)} (${sign}${best.delta}% vs $${price0.toFixed(2)}) with ~${best.buyers} buyers.`,
+      base_price: +price0.toFixed(2), recommended_price: best.price, price_points: points,
+    };
+  }
+
+  if (strategy === "segment") {
+    const dims = [["by_gender", "Gender"], ["by_income_tier", "Income"]];
+    const minN = Math.max(3, n * 0.02);
+    const ranked = [];
+    dims.forEach(([dim, label]) => (cohorts[dim] || []).forEach(seg => {
+      if (!seg.name || seg.name === "Unknown" || seg.n < minN) return;
+      ranked.push({ dimension: label, name: seg.name, propensity: seg.propensity || 0, buy_pct: Math.round(seg.buy_pct || 0), n: seg.n });
+    }));
+    ranked.sort((a, b) => b.propensity - a.propensity);
+    const best = ranked[0] || null;
+    return {
+      strategy: "segment", title: "Best segment for your launch",
+      summary: best
+        ? `Best segment: ${best.dimension} · ${best.name} (propensity ${best.propensity.toFixed(2)}, n=${best.n}).`
+        : "Not enough data to rank segments — try a larger sample.",
+      best_segment: best, ranked_segments: ranked.slice(0, 6),
+    };
+  }
+
+  // customers
+  const ranked = [...items].sort((a, b) => (b.propensity_to_buy || 0) - (a.propensity_to_buy || 0));
+  const top = ranked.slice(0, 10).map(d => ({
+    customer_id: d.customer_id || "", name: d.name || d.customer_id || "",
+    propensity: +(d.propensity_to_buy || 0).toFixed(4), expected_spend: +(d.expected_spend_usd || 0).toFixed(2),
+    top_category: d.top_category || "",
+  }));
+  const high = items.filter(a => (a.propensity_to_buy || 0) >= 0.6).length;
+  return {
+    strategy: "customers", title: "Top customers for your launch",
+    summary: `${high} of ${n} simulated customers are high-intent (propensity ≥ 0.60). Prioritise launch outreach to the ranked list below.`,
+    high_intent_count: high, top_customers: top,
+  };
+}
 
 export default function SimulatorPage() {
   // Config state (all filters from the HTML template) — pre-filled with AuroraBuds default
@@ -16,33 +113,10 @@ export default function SimulatorPage() {
     productName: "AuroraBuds \u2014 Smart Sleep Earbuds",
     productDesc: "Wireless sleep earbuds that actively mask ambient noise with adaptive soundscapes and gently track your sleep stages through the night. Featherlight silicone tips stay comfortable for side-sleepers, battery lasts a full 9-hour night, and a smart alarm wakes you in your lightest sleep phase. Built for frequent travellers, light sleepers and anyone chasing better rest.",
     productImg: null,
-    productDoc: [
-      "AuroraBuds \u2014 Smart Sleep Earbuds \u00b7 Product Documentation",
-      "",
-      "OVERVIEW",
-      "AuroraBuds are wireless in-ear earbuds designed specifically for sleep, not music-first listening. They combine adaptive noise masking with gentle sleep-stage tracking to help light sleepers and travellers fall asleep faster and wake up more refreshed.",
-      "",
-      "KEY FEATURES",
-      "- Adaptive soundscapes: 20 built-in masking tracks (rain, brown noise, ocean, fan) that auto-adjust volume to cover sudden ambient noises like snoring or traffic.",
-      "- Sleep-stage tracking: on-board sensors estimate light, deep and REM stages and sync to the AuroraSleep app each morning.",
-      "- Smart alarm: wakes you during your lightest sleep phase within a 30-minute window so you feel less groggy.",
-      "- Comfort fit: featherlight 3.2g body with 4 silicone tip sizes, designed to stay put for side-sleepers.",
-      "- Battery: 9 hours continuous on a single charge; the charging case adds 3 full nights. USB-C, 10-min quick charge gives 2 hours.",
-      "",
-      "PRICE & AVAILABILITY",
-      "AuroraBuds retail at $89. Launch colours are Midnight and Mist. A 30-night risk-free trial is included, with free returns.",
-      "",
-      "COMFORT & SAFETY",
-      "The earbuds use low-volume masking capped at a sleep-safe level. They are sweat-resistant (IPX4) but not for swimming. Materials are hypoallergenic medical-grade silicone.",
-      "",
-      "WARRANTY & SUPPORT",
-      "Every pair includes a 1-year limited warranty covering manufacturing defects. Support is available via the app chat and email within 24 hours.",
-      "",
-      "WHO IT\u2019S FOR",
-      "Best for light sleepers, people with snoring partners, shift workers, and frequent travellers who struggle to sleep in noisy or unfamiliar places."
-    ].join("\n"),
+    productDoc: AURORABUDS_DOC,
     humanPct: 20,
     count: 5000, genderSplit: 50, ageMin: 25, ageMax: 44,
+    loops: 1, confidenceSample: 500,
     chars: { earlyAdopter: true, priceSensitive: true, brandLoyal: false, riskAverse: false },
     budget: 120, price: 89,
     fit: 62, marketing: 60, innovation: 55, brandFit: 58,
@@ -53,6 +127,10 @@ export default function SimulatorPage() {
   });
   const [configured, setConfigured] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
+  const [ragDocs, setRagDocs] = useState(DEFAULT_RAG_DOCS);
+  const [ragBuilt, setRagBuilt] = useState(false);
+  const [scenarioId, setScenarioId] = useState(null);
+  const [strategy, setStrategy] = useState("customers");
 
   // Run state
   const [loading, setLoading] = useState(false);
@@ -76,7 +154,7 @@ export default function SimulatorPage() {
       const m = ev.data || {};
       if (m.type === "presence-ping") {
         // Survey tab announced itself — send current product config
-        busPost({ type: "product-sync", product: { name: config.productName, desc: config.productDesc, img: config.productImg, doc: config.productDoc || "" } });
+        busPost({ type: "product-sync", product: { name: config.productName, desc: config.productDesc, img: config.productImg, doc: config.productDoc || "" }, scenarioId: scenarioId });
       } else if (m.type === "human-vote") {
         // Live vote from a survey respondent
         const voteKey = m.vote === "yes" ? "yes" : m.vote === "never" ? "never" : "unsure";
@@ -92,7 +170,7 @@ export default function SimulatorPage() {
     }
     bus.onmessage = handler;
     return () => { bus.onmessage = null; };
-  }, [config.productName, config.productDesc, config.productImg, config.productDoc]);
+  }, [config.productName, config.productDesc, config.productImg, config.productDoc, scenarioId]);
 
   // Poll backend for vote tally (real-time from DynamoDB)
   useEffect(() => {
@@ -128,10 +206,11 @@ export default function SimulatorPage() {
     busPost({
       type: "survey-links-update",
       runId: run.run_id,
+      scenarioId: scenarioId,
       customers: run.human_customers,
       votes: customerVotes,
     });
-  }, [run?.run_id, run?.human_customers, customerVotes]);
+  }, [run?.run_id, run?.human_customers, customerVotes, scenarioId]);
 
   const pollStatus = useCallback(async (runId) => {
     try {
@@ -153,10 +232,13 @@ export default function SimulatorPage() {
         setAgents(agentData);
         setLiveAgents(null);
         setLoading(false);
+        // Session ended naturally → close all open survey pages (pending + submitted)
+        busPost({ type: "survey-closed" });
       } else if (data.status === "failed") {
         clearInterval(pollRef.current);
         setError(data.error || "Simulation failed");
         setLoading(false);
+        busPost({ type: "survey-closed" });
       }
     } catch (e) {
       clearInterval(pollRef.current);
@@ -187,7 +269,7 @@ export default function SimulatorPage() {
     setCustomerVotes({});
     setMgrThreads([]);
     // Broadcast run-started to survey tabs (resets their votes)
-    busPost({ type: "run-started", product: { name: config.productName, desc: config.productDesc, img: config.productImg, doc: config.productDoc || "" } });
+    busPost({ type: "run-started", product: { name: config.productName, desc: config.productDesc, img: config.productImg, doc: config.productDoc || "" }, scenarioId: scenarioId });
     try {
       const scenario = await createScenario({
         name: config.productName || "Unnamed product",
@@ -204,8 +286,15 @@ export default function SimulatorPage() {
         target_gender: config.gender || "all",
         offer: { type: config.offerType || "none", value_pct: config.offerValue || 0 },
         channel: config.channel || "all",
+        strategy: strategy,
+        loops: config.loops ?? 1,
+        confidence_sample: config.confidenceSample ?? 0,
       });
-      const runData = await startRun(scenario.scenario_id, config.count, config.humanPct);
+      const runData = await startRun(scenario.scenario_id, config.count, config.humanPct, scenarioId || "");
+      // Only adopt the run's scenario for Raaga if no RAG-indexed scenario exists.
+      // If the user built a product knowledge base ("Update Product"), that scenario
+      // holds the RAG index — keep using it so survey tabs can answer questions.
+      setScenarioId((prev) => prev || scenario.scenario_id);
       setRun(runData);
       // Broadcast runId to survey tabs so they can POST votes to the correct run
       busPost({ type: "run-id-sync", runId: runData.run_id });
@@ -248,12 +337,45 @@ export default function SimulatorPage() {
 
   return (
     <div className="fade-in">
-      <div className="sim-wrap">
+      <div className="sim-wrap" style={{ width: "min(100vw - 48px, 1360px)", maxWidth: "none", marginLeft: "50%", transform: "translateX(-50%)" }}>
         {error && (
           <div style={{ background: "var(--red-l)", border: "1px solid #f5c6cb", borderRadius: 12, padding: "12px 16px", marginBottom: 20, fontSize: 14, color: "var(--red)" }}>
             ⚠ {error}
           </div>
         )}
+
+        <div style={{ display: "flex", gap: 24, alignItems: "stretch", justifyContent: "center", flexWrap: "nowrap" }}>
+          <div style={{ width: results ? "100%" : 905, maxWidth: "100%", minWidth: 0 }}>
+        {/* Marketing strategy */}
+        <div className="card" style={{ padding: 16, marginBottom: 14 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2, display: "flex", alignItems: "center", gap: 8 }}>
+            <span>🎯</span> What’s your marketing strategy today?
+          </div>
+          <div style={{ fontSize: 12.5, color: "var(--g500)", marginBottom: 12 }}>Pick a goal — it shapes how the results are analysed for your product launch.</div>
+          <div className="seg-control" role="tablist">
+            {[
+              { id: "customers", icon: "🎯", label: "Find top 10k customers" },
+              { id: "price", icon: "💲", label: "Find the right price" },
+              { id: "segment", icon: "🧩", label: "Find the right segment" },
+            ].map(opt => {
+              const active = strategy === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  className="seg-item"
+                  data-active={active ? "1" : "0"}
+                  onClick={() => setStrategy(opt.id)}
+                >
+                  <span style={{ fontSize: 15 }}>{opt.icon}</span>
+                  <span>{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         {/* Action bar */}
         <div className="card" style={{ padding: 16 }}>
@@ -396,6 +518,7 @@ export default function SimulatorPage() {
                           sample_confidence: sampleConf,
                         } : undefined,
                       };
+                      finalResults.strategy_insight = buildStrategyInsight(strategy, items, cohorts, config.price);
                     }
 
                     if (finalResults) {
@@ -454,8 +577,15 @@ export default function SimulatorPage() {
         {/* Results */}
         {!loading && results && (
           <div className="stack" style={{ marginTop: 22 }}>
+            {run?.human_customers?.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#f2f7ff", border: "1px solid #d7e3f7", borderRadius: 10, fontSize: 13.5, color: "#1558b0", fontWeight: 600 }}>
+                <span style={{ fontSize: 15 }}>👥</span>
+                {Object.keys(customerVotes).length} of {run.human_customers.length} human survey responses collected · survey closed
+              </div>
+            )}
             {results.reconciliation && <ReconcileCard results={results} />}
             <VerdictGauge results={results} onReset={handleReset} />
+            {results.strategy_insight && <StrategyInsight insight={results.strategy_insight} />}
             {agentList.length > 0 && <SwarmDots agents={agentList} totalAgents={results.headline?.n_agents} customerVotes={customerVotes} />}
             {agentList.length > 0 && <PropensityChart agents={agentList} />}
             <div className="chart-grid">
@@ -479,6 +609,78 @@ export default function SimulatorPage() {
             }} />
           </div>
         )}
+          </div>
+          {!results && (
+          <div className="card" style={{ flex: "0 0 380px", width: 380, padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "14px 18px", background: "#f2f7ff", color: "#1558b0", borderBottom: "1px solid #d7e3f7", fontWeight: 700, fontSize: 15 }}>
+              <span style={{ fontSize: 17 }}>🌐</span>
+              Show Customer Survey
+            </div>
+            {run?.human_customers?.length > 0 && results ? (
+              /* Session ended → survey closed summary */
+              <div style={{ flex: 1, minHeight: 320, display: "grid", placeItems: "center", padding: 24, textAlign: "center" }}>
+                <div>
+                  <div className="empty-ic" style={{ margin: "0 auto 14px", fontSize: 26 }}>🔒</div>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>Survey closed</div>
+                  <div style={{ fontSize: 13, color: "var(--g500)", marginTop: 6, lineHeight: 1.5, maxWidth: 260 }}>
+                    The simulation has ended — the survey is no longer accepting responses.
+                  </div>
+                  <div style={{ marginTop: 18, display: "inline-flex", flexDirection: "column", gap: 4, padding: "14px 26px", background: "#f2f7ff", border: "1px solid #d7e3f7", borderRadius: 12 }}>
+                    <span style={{ fontSize: 30, fontWeight: 800, color: "#1558b0", lineHeight: 1 }}>
+                      {Object.keys(customerVotes).length}
+                      <span style={{ fontSize: 17, color: "var(--g500)", fontWeight: 600 }}> / {run.human_customers.length}</span>
+                    </span>
+                    <span style={{ fontSize: 12, color: "var(--g500)" }}>responses collected</span>
+                  </div>
+                </div>
+              </div>
+            ) : run?.human_customers?.length > 0 ? (
+              <>
+                <div className="survey-links-list" style={{ flex: 1, maxHeight: "none" }}>
+                  {run.human_customers.map((h, i) => {
+                    const voted = customerVotes[h.customer_id];
+                    const url = `/survey?runId=${run.run_id}&custId=${h.customer_id}&name=${encodeURIComponent(h.name || h.customer_id)}&gender=${encodeURIComponent(h.gender || "")}`;
+                    return (
+                      <div key={h.customer_id} className="survey-link-row">
+                        <span className="survey-link-num">{i + 1}</span>
+                        <span className="survey-link-avatar" style={{ background: h.gender === "Female" ? "#ea4c89" : "var(--blue)" }}>
+                          {(h.name || h.customer_id).charAt(0)}
+                        </span>
+                        <div className="survey-link-info">
+                          <div className="survey-link-name">{h.name || h.customer_id}</div>
+                          <div className="survey-link-id">{h.customer_id}</div>
+                        </div>
+                        {voted ? (
+                          <span className="survey-link-status done">✓ {voted}</span>
+                        ) : (
+                          <span className="survey-link-status pending">pending</span>
+                        )}
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="survey-link-open" title="Open survey">↗</a>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button className="survey-links-openall" onClick={() => {
+                  run.human_customers.forEach(h => {
+                    const url = `/survey?runId=${run.run_id}&custId=${h.customer_id}&name=${encodeURIComponent(h.name || h.customer_id)}&gender=${encodeURIComponent(h.gender || "")}`;
+                    window.open(url, "_blank");
+                  });
+                }}>
+                  Nudge all {run.human_customers.length}
+                </button>
+              </>
+            ) : (
+              <div style={{ flex: 1, minHeight: 320, display: "grid", placeItems: "center", padding: 24, textAlign: "center" }}>
+                <div>
+                  <div className="empty-ic" style={{ margin: "0 auto 12px" }}>🌐</div>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>No active survey</div>
+                  <div style={{ fontSize: 13, color: "var(--g500)", marginTop: 6 }}>Start a simulation to generate survey links for real users.</div>
+                </div>
+              </div>
+            )}
+          </div>
+          )}
+        </div>
       </div>
 
       {showConfig && (
@@ -487,6 +689,12 @@ export default function SimulatorPage() {
           onChange={setConfig}
           onSave={() => { setConfigured(true); setShowConfig(false); }}
           onCancel={() => setShowConfig(false)}
+          ragDocs={ragDocs}
+          onRagDocsChange={setRagDocs}
+          ragBuilt={ragBuilt}
+          onRagBuiltChange={setRagBuilt}
+          scenarioId={scenarioId}
+          onScenarioIdChange={setScenarioId}
         />
       )}
 

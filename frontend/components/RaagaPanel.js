@@ -1,15 +1,16 @@
 import { useState, useRef, useEffect } from "react";
+import { askRaaga } from "@/lib/api";
 
 /**
  * Raaga — RAG-powered product survey assistant chat panel.
  *
  * Props:
  *  - productName: string
- *  - productDoc: string (full text doc for retrieval)
+ *  - scenarioId: string — backend Bedrock + Pinecone RAG knowledge base
  *  - onEscalate: (question) => void  — called when user clicks "Ask a human"
  *  - humanAnswers: [{id, answer}] — answers from PM pushed in
  */
-export default function RaagaPanel({ productName, productDoc, onEscalate, humanAnswers }) {
+export default function RaagaPanel({ productName, scenarioId, onEscalate, humanAnswers }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -31,23 +32,6 @@ export default function RaagaPanel({ productName, productDoc, onEscalate, humanA
     setAwaitingHuman(false);
   }, [humanAnswers]);
 
-  function retrieve(question) {
-    if (!productDoc) return [];
-    const passages = productDoc.split(/\n\s*\n/).map(s => s.trim()).filter(s => s.length > 4);
-    const stopwords = new Set(["the","a","an","is","are","of","to","and","or","in","on","for","with","it","this","that","you","your","i","do","does","can","how","what","when","where","which","my","me","we","be","as","at","by","from","will","would","if","so"]);
-    const tokenize = s => (s.toLowerCase().match(/[a-z0-9]+/g) || []).filter(w => w.length > 2 && !stopwords.has(w));
-    const qToks = tokenize(question);
-    if (!qToks.length) return passages.slice(0, 2);
-    const scored = passages.map(p => {
-      const pl = p.toLowerCase();
-      let score = 0;
-      qToks.forEach(t => { if (pl.includes(t)) score += 1; });
-      return { p, score };
-    });
-    scored.sort((a, b) => b.score - a.score);
-    return scored.filter(s => s.score > 0).slice(0, 3).map(s => s.p);
-  }
-
   async function ask(question) {
     if (busy || !question.trim()) return;
     const q = question.trim();
@@ -56,34 +40,29 @@ export default function RaagaPanel({ productName, productDoc, onEscalate, humanA
     setBusy(true);
     setAwaitingHuman(false);
 
-    const passages = retrieve(q);
-    const context = passages.length ? passages.map((p, i) => `[${i + 1}] ${p}`).join("\n\n") : "(no documentation provided)";
-
-    // Try to call LLM (fallback to passage-based answer)
     let answer = "";
-    try {
-      const sys = `You are Raaga, a friendly product survey assistant for "${productName || "this product"}". Answer the customer's question using ONLY the documentation excerpts provided. Be concise (2-4 sentences), warm, and factual. If the excerpts do not contain the answer, say you don't have that detail and suggest asking a human.`;
-      const userMsg = `Product: ${productName || ""}\n\nDocumentation excerpts:\n${context}\n\nCustomer question: ${q}`;
+    let sources = [];
 
-      const resp = await fetch("/api/raaga", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ system: sys, message: userMsg }),
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        answer = data.answer || "";
+    // Real-time RAG via backend (Bedrock Titan embeddings + Pinecone + Nova)
+    if (scenarioId) {
+      console.debug("[Raaga] asking against scenarioId:", scenarioId, "·", q);
+      try {
+        const resp = await askRaaga(scenarioId, q, productName || "this product");
+        answer = resp.answer || "";
+        sources = (resp.sources || []).map(s => s.text || s);
+      } catch (e) {
+        answer = "";
       }
-    } catch (e) { /* fallback */ }
+    }
 
     if (!answer) {
-      answer = passages.length
-        ? `From the documentation: ${passages[0].slice(0, 200)}`
-        : "I don't have documentation for this product yet. Would you like to ask a human specialist?";
+      answer = scenarioId
+        ? "I couldn't reach the product knowledge base right now. Please try again, or ask a human specialist."
+        : "Product documentation hasn't been set up for this survey yet. Would you like to ask a human specialist?";
     }
 
     setBusy(false);
-    setMessages(prev => [...prev, { role: "assistant", text: answer, escalate: true, sources: passages.slice(0, 2) }]);
+    setMessages(prev => [...prev, { role: "assistant", text: answer, escalate: true, sources }]);
   }
 
   function handleEscalate() {
