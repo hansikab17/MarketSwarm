@@ -81,7 +81,7 @@ export default function InternalsPage() {
   const load = useCallback(async () => {
     try {
       setError("");
-      const [res, h] = await Promise.all([getAwsMetrics(180), getHits(60).catch(() => null)]);
+      const [res, h] = await Promise.all([getAwsMetrics(10080), getHits(60).catch(() => null)]);
       setData(res);
       setHits(h);
     } catch (e) {
@@ -381,3 +381,4 @@ function VercelHitsCard({ hits }) {
     </div>
   );
 }
+
