@@ -381,4 +381,3 @@ function VercelHitsCard({ hits }) {
     </div>
   );
 }
-

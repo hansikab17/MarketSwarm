@@ -55,6 +55,170 @@ export default function Home() {
         ))}
       </div>
 
+      <div className="section-title">Customer data we use</div>
+      <h2 className="section-h">8 signals feeding every synthetic customer</h2>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gap: 16,
+          marginBottom: 24,
+        }}
+      >
+        {[
+          ["🛒","Transactions","Frequency, recency, value and basket mix — the backbone of spend behaviour.","#6366f1"],
+          ["⭐","Reviews & ratings","Star ratings, sentiment and product affinity from what customers say.","#f59e0b"],
+          ["💬","Feedback & surveys","NPS, CSAT and free-text themes that reveal motivations and friction.","#10b981"],
+          ["↩️","Returns","Return reasons and rates — a strong negative signal for fit.","#ef4444"],
+          ["📄","Contracts","Tenure, terms, renewals and upgrades that show commitment.","#8b5cf6"],
+          ["🧾","Billing","Plan, payment health and dunning, a proxy for budget and reliability.","#0ea5e9"],
+          ["🎧","Support tickets","Volume, severity and resolution effort — early churn indicators.","#ec4899"],
+          ["💰","Budget & income","Estimated disposable budget used to test price sensitivity.","#14b8a6"],
+        ].map(([ic, t, d, color], i) => (
+          <div
+            key={i}
+            className="card"
+            style={{
+              padding: "18px 16px",
+              position: "relative",
+              borderTop: `3px solid ${color}`,
+              minWidth: 0,
+            }}
+          >
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                background: `${color}1a`,
+                color: color,
+                display: "grid",
+                placeItems: "center",
+                fontSize: 18,
+                marginBottom: 10,
+              }}
+            >{ic}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4, color: "var(--g900)" }}>{t}</div>
+            <div style={{ fontSize: 12.5, color: "var(--g500)", lineHeight: 1.5 }}>{d}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Funnel arrow into the hub */}
+      <div style={{ display: "grid", placeItems: "center", margin: "8px 0" }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 4,
+          }}
+        >
+          <div style={{ width: 2, height: 28, background: "linear-gradient(to bottom, #cfe0fb, var(--blue))" }} />
+          <div
+            style={{
+              width: 0,
+              height: 0,
+              borderLeft: "8px solid transparent",
+              borderRight: "8px solid transparent",
+              borderTop: "10px solid var(--blue)",
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Central hub */}
+      <div
+        style={{
+          background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 60%, #3b82f6 100%)",
+          color: "#fff",
+          borderRadius: 18,
+          padding: "28px 32px",
+          boxShadow: "0 20px 48px -16px rgba(37,99,235,.45)",
+          display: "grid",
+          gridTemplateColumns: "auto 1fr",
+          gap: 24,
+          alignItems: "center",
+        }}
+      >
+        <div
+          style={{
+            width: 96,
+            height: 96,
+            borderRadius: "50%",
+            background: "rgba(255,255,255,.15)",
+            border: "2px solid rgba(255,255,255,.4)",
+            display: "grid",
+            placeItems: "center",
+            fontSize: 38,
+            flexShrink: 0,
+          }}
+        >🧬</div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", opacity: .85, marginBottom: 6 }}>360° Customer Profile</div>
+          <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 8, lineHeight: 1.2 }}>Aggregated into a per-customer synthetic profile</div>
+          <div style={{ fontSize: 14, opacity: .9, lineHeight: 1.6, maxWidth: 720 }}>
+            All 8 signals are fused into a single behavioural fingerprint per customer — propensities, price sensitivity, channel affinity, churn risk and lifetime value — ready for the swarm to pressure-test your launch.
+          </div>
+        </div>
+      </div>
+
+      {/* Arrow to output */}
+      <div style={{ display: "grid", placeItems: "center", margin: "8px 0" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+          <div style={{ width: 2, height: 28, background: "linear-gradient(to bottom, var(--blue), #cfe0fb)" }} />
+          <div
+            style={{
+              width: 0,
+              height: 0,
+              borderLeft: "8px solid transparent",
+              borderRight: "8px solid transparent",
+              borderTop: "10px solid #cfe0fb",
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Output row — 3 tiles */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          gap: 16,
+          marginBottom: 48,
+        }}
+      >
+        {[
+          ["🎯","Targets the right buyers","Rank top customers by predicted intent."],
+          ["💲","Calibrates the right price","Sweep price points for max revenue."],
+          ["🧩","Surfaces the best segment","See which audience your launch resonates with."],
+        ].map(([ic, t, d], i) => (
+          <div
+            key={i}
+            className="card"
+            style={{ padding: "18px 18px", textAlign: "left", display: "flex", gap: 14, alignItems: "flex-start" }}
+          >
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 10,
+                background: "#eef4ff",
+                color: "var(--blue)",
+                display: "grid",
+                placeItems: "center",
+                fontSize: 20,
+                flexShrink: 0,
+              }}
+            >{ic}</div>
+            <div>
+              <div style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 4, color: "var(--g900)" }}>{t}</div>
+              <div style={{ fontSize: 12.5, color: "var(--g500)", lineHeight: 1.5 }}>{d}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
       <div className="land-final">
         <h2>Ready to see your launch through the swarm?</h2>
         <p>No setup, no data upload. Open the simulator and run your first scenario in seconds.</p>

@@ -131,6 +131,33 @@ export default function SimulatorPage() {
   const [ragBuilt, setRagBuilt] = useState(false);
   const [scenarioId, setScenarioId] = useState(null);
   const [strategy, setStrategy] = useState("customers");
+  const [strategyPicked, setStrategyPicked] = useState(false);
+  const [showStrategyModal, setShowStrategyModal] = useState(true);
+
+  const STRATEGY_OPTIONS = [
+    {
+      id: "customers",
+      icon: "\uD83C\uDFAF",
+      title: "TARGET top 10k customers for my product launch",
+      desc: "Rank the most likely buyers so you can focus your launch outreach on the highest-propensity audience first.",
+      btn: "TARGET top 10k customers",
+    },
+    {
+      id: "price",
+      icon: "\uD83D\uDCB2",
+      title: "Find the right PRICE for my product launch",
+      desc: "Sweep price points around your list price to find the one that maximises projected revenue and buyer count.",
+      btn: "Find the right PRICE",
+    },
+    {
+      id: "segment",
+      icon: "\uD83E\uDDE9",
+      title: "Find the right SEGMENT for my product launch",
+      desc: "Compare audience segments (gender, income, age) and surface which one your product resonates with most.",
+      btn: "Find the right SEGMENT",
+    },
+  ];
+  const activeStrategy = STRATEGY_OPTIONS.find(o => o.id === strategy) || STRATEGY_OPTIONS[0];
 
   // Run state
   const [loading, setLoading] = useState(false);
@@ -346,37 +373,6 @@ export default function SimulatorPage() {
 
         <div style={{ display: "flex", gap: 24, alignItems: "stretch", justifyContent: "center", flexWrap: "nowrap" }}>
           <div style={{ width: results ? "100%" : 905, maxWidth: "100%", minWidth: 0 }}>
-        {/* Marketing strategy */}
-        <div className="card" style={{ padding: 16, marginBottom: 14 }}>
-          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2, display: "flex", alignItems: "center", gap: 8 }}>
-            <span>🎯</span> What’s your marketing strategy today?
-          </div>
-          <div style={{ fontSize: 12.5, color: "var(--g500)", marginBottom: 12 }}>Pick a goal — it shapes how the results are analysed for your product launch.</div>
-          <div className="seg-control" role="tablist">
-            {[
-              { id: "customers", icon: "🎯", label: "Find top 10k customers" },
-              { id: "price", icon: "💲", label: "Find the right price" },
-              { id: "segment", icon: "🧩", label: "Find the right segment" },
-            ].map(opt => {
-              const active = strategy === opt.id;
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  className="seg-item"
-                  data-active={active ? "1" : "0"}
-                  onClick={() => setStrategy(opt.id)}
-                >
-                  <span style={{ fontSize: 15 }}>{opt.icon}</span>
-                  <span>{opt.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         {/* Action bar */}
         <div className="card" style={{ padding: 16 }}>
           {loading ? (
@@ -545,17 +541,78 @@ export default function SimulatorPage() {
           ) : (
             <div className="action-bar">
               <button className="act-btn config" onClick={() => setShowConfig(true)}>
-                🏛️ Configure Product
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                  <span>🏛️</span>
+                  <span>Configure Product</span>
+                  <span aria-hidden style={{ width: 1, height: 18, background: "rgba(15,23,42,.12)" }} />
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "4px 11px",
+                      borderRadius: 8,
+                      background: "#e8f0ff",
+                      border: "1.5px solid #c4d8f7",
+                      color: "#1558b0",
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      letterSpacing: ".1px",
+                    }}
+                  >
+                    {activeStrategy.btn}
+                  </span>
+                </span>
               </button>
               <button className={`act-btn run${configured ? "" : " disabled"}`} onClick={handleRun}>
                 ▶ Run Market Swarm Simulation
               </button>
             </div>
           )}
-          <div className="action-summary">
-            {configured
-              ? `"${config.productName || "Unnamed product"}" · ${config.count.toLocaleString()} panel · ${config.humanPct}% human / ${100 - config.humanPct}% agent`
-              : "Configure a product first, then run the blended human + agent simulation."}
+          <div
+            className="action-summary"
+            style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 12 }}
+          >
+            <div style={{ justifySelf: "start" }}>
+              {!loading && (
+                <button
+                  type="button"
+                  onClick={() => setShowStrategyModal(true)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "6px 12px",
+                    borderRadius: 8,
+                    background: "#eef4ff",
+                    border: "1px solid #cfe0fb",
+                    color: "var(--blue)",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontSize: 12.5,
+                    lineHeight: 1,
+                    transition: "all .15s ease",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#dfeaff"; e.currentTarget.style.borderColor = "#a8c8f5"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "#eef4ff"; e.currentTarget.style.borderColor = "#cfe0fb"; }}
+                >
+                  ⇄ Change strategy
+                </button>
+              )}
+            </div>
+            <div style={{ justifySelf: "center", textAlign: "center" }}>
+              {configured ? (
+                <>
+                  <span style={{ fontWeight: 700, color: "var(--g900)" }}>“{config.productName || "Unnamed product"}”</span>
+                  <span style={{ color: "var(--g300)", margin: "0 8px" }}>·</span>
+                  <span>{config.count.toLocaleString()} panel</span>
+                  <span style={{ color: "var(--g300)", margin: "0 8px" }}>·</span>
+                  <span>{config.humanPct}% human / {100 - config.humanPct}% agent</span>
+                </>
+              ) : (
+                "Configure a product first, then run the blended human + agent simulation."
+              )}
+            </div>
+            <div />
           </div>
         </div>
 
@@ -599,14 +656,35 @@ export default function SimulatorPage() {
 
         {/* Empty state */}
         {!loading && !results && (
-          <div className="card empty" style={{ marginTop: 22 }}>
-            <div className="empty-ic">🎛️</div>
-            <div className="empty-t">{configured ? "Ready to run" : "Configure a product to begin"}</div>
-            <div className="empty-s" dangerouslySetInnerHTML={{
-              __html: configured
-                ? 'Press <b>Run Market Swarm Simulation</b>. Agents compute instantly; human responses are collected live over a 10-minute window, with results refreshing every 5 seconds.'
-                : 'Press <b>Configure a product</b> to set the product, the human/agent mix and the audience. Then run the blended simulation.'
-            }} />
+          <div
+            className="card empty"
+            style={{
+              marginTop: 22,
+              padding: "40px 32px",
+              minHeight: 380,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              textAlign: "center",
+            }}
+          >
+            <div
+              className="empty-ic"
+              style={{ width: 72, height: 72, fontSize: 32, marginBottom: 18 }}
+            >🎛️</div>
+            <div className="empty-t" style={{ fontSize: 22 }}>
+              {configured ? "Ready to run" : "Configure a product to begin"}
+            </div>
+            <div
+              className="empty-s"
+              style={{ fontSize: 15, marginTop: 10, maxWidth: 560, lineHeight: 1.6 }}
+              dangerouslySetInnerHTML={{
+                __html: configured
+                  ? 'Press <b>Run Market Swarm Simulation</b>. Agents compute instantly; human responses are collected live over a 10-minute window, with results refreshing every 5 seconds.'
+                  : 'Press <b>Configure a product</b> to set the product, the human/agent mix and the audience. Then run the blended simulation.'
+              }}
+            />
           </div>
         )}
           </div>
@@ -696,6 +774,99 @@ export default function SimulatorPage() {
           scenarioId={scenarioId}
           onScenarioIdChange={setScenarioId}
         />
+      )}
+
+      {showStrategyModal && (
+        <div
+          className="overlay"
+          onClick={() => { if (strategyPicked) setShowStrategyModal(false); }}
+          style={{ paddingTop: 50 }}
+        >
+          <div
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 720, width: "100%", padding: 0, borderRadius: 18, overflow: "hidden", background: "#fff", boxShadow: "0 24px 60px -12px rgba(15,23,42,.35)", marginTop: 0 }}
+          >
+            <div style={{ padding: "26px 32px 18px", borderBottom: "1px solid var(--g100)", background: "linear-gradient(135deg, #f2f7ff 0%, #ffffff 100%)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, fontWeight: 800, fontSize: 20, color: "var(--g900)" }}>
+                <span style={{ fontSize: 26 }}>🎯</span>
+                What’s your marketing strategy today?
+              </div>
+              <div style={{ fontSize: 13.5, color: "var(--g500)", marginTop: 8, lineHeight: 1.55, maxWidth: 560 }}>
+                Pick a goal for your product launch — it shapes how MarketSwarm analyses the simulation results. You can change this any time.
+              </div>
+            </div>
+            <div style={{ padding: "22px 24px 8px", display: "flex", flexDirection: "column", gap: 14 }}>
+              {STRATEGY_OPTIONS.map(opt => {
+                const active = strategy === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      setStrategy(opt.id);
+                      setStrategyPicked(true);
+                      setShowStrategyModal(false);
+                    }}
+                    style={{
+                      textAlign: "left",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 18,
+                      padding: "18px 22px",
+                      borderRadius: 14,
+                      border: active ? "2px solid var(--blue)" : "1.5px solid var(--g100)",
+                      background: active ? "#f2f7ff" : "#fff",
+                      cursor: "pointer",
+                      transition: "all .15s ease",
+                      boxShadow: active ? "0 10px 24px -10px rgba(21,88,176,.35)" : "0 1px 2px rgba(0,0,0,.03)",
+                    }}
+                    onMouseEnter={(e) => { if (!active) { e.currentTarget.style.borderColor = "var(--blue)"; e.currentTarget.style.background = "#f7faff"; e.currentTarget.style.transform = "translateY(-1px)"; } }}
+                    onMouseLeave={(e) => { if (!active) { e.currentTarget.style.borderColor = "var(--g100)"; e.currentTarget.style.background = "#fff"; e.currentTarget.style.transform = "none"; } }}
+                  >
+                    <span
+                      style={{
+                        flexShrink: 0,
+                        width: 48,
+                        height: 48,
+                        borderRadius: 12,
+                        background: active ? "var(--blue)" : "#eef4ff",
+                        color: active ? "#fff" : "var(--blue)",
+                        display: "grid",
+                        placeItems: "center",
+                        fontSize: 24,
+                        transition: "all .15s ease",
+                      }}
+                    >
+                      {opt.icon}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: "var(--g900)", marginBottom: 5 }}>{opt.title}</div>
+                      <div style={{ fontSize: 13, color: "var(--g500)", lineHeight: 1.55 }}>{opt.desc}</div>
+                    </div>
+                    <span style={{ fontSize: 20, color: active ? "var(--blue)" : "var(--g300)", flexShrink: 0, fontWeight: 600 }}>→</span>
+                  </button>
+                );
+              })}
+            </div>
+            {strategyPicked ? (
+              <div style={{ padding: "14px 24px 22px", display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  className="act-btn ghost"
+                  onClick={() => setShowStrategyModal(false)}
+                  style={{ padding: "8px 18px", fontSize: 13 }}
+                >
+                  Close
+                </button>
+              </div>
+            ) : (
+              <div style={{ padding: "14px 24px 22px", textAlign: "center", fontSize: 12.5, color: "var(--g500)" }}>
+                Pick a strategy to continue.
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Manager dock — FAB always visible for answering escalated questions */}

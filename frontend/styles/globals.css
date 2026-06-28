@@ -15,13 +15,20 @@ a:hover { text-decoration:underline; }
 .logo { width:40px; height:40px; border-radius:10px; display:grid; place-items:center; background:linear-gradient(135deg,#1a73e8,#34a853 60%,#fbbc04); color:white; font-weight:800; font-size:16px; cursor:pointer; }
 .h-title { font-size:18px; font-weight:700; letter-spacing:-.2px; }
 .h-sub { font-size:12.5px; color:var(--g500); }
-.nav { margin-left:auto; display:flex; align-items:center; gap:4px; }
+.nav { margin-left:auto; display:flex; align-items:center; gap:10px; }
 .nav-link { border:none; background:transparent; color:var(--g700); border-radius:999px; padding:9px 16px; font-size:14px; font-weight:600; cursor:pointer; transition:all .15s; text-decoration:none; font-family:inherit; }
 .nav-link:hover { background:var(--g100); text-decoration:none; }
 .nav-link.active { background:#e8f0fe; color:var(--blue-dark); }
-.nav-live { display:inline-flex; align-items:center; gap:7px; }
-.nav-live.active { background:var(--green-l); color:#146c2e; }
+.nav-primary { background:var(--blue); color:#fff !important; box-shadow:0 1px 2px rgba(26,115,232,.25), 0 4px 10px -4px rgba(26,115,232,.45); }
+.nav-primary:hover { background:var(--blue-dark); }
+.nav-primary.active { background:var(--blue-dark); color:#fff; }
+.nav-live { display:inline-flex; align-items:center; gap:7px; background:var(--green-l); color:#146c2e; border:1px solid #b6e0c2; }
+.nav-live:hover { background:#d9efe1; }
+.nav-live.active { background:#cfeadb; color:#0f5a26; border-color:#9ad3ad; }
 .nav-live-dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 0 0 rgba(30,142,62,.5); animation:navpulse 1.8s infinite; }
+.nav-demo { display:inline-flex; align-items:center; gap:7px; background:#fdecec; color:#b91c1c; border:1px solid #fbcaca; }
+.nav-demo:hover { background:#fbdada; }
+.nav-demo svg { fill:#dc2626; }
 @keyframes navpulse { 0%{box-shadow:0 0 0 0 rgba(30,142,62,.5);} 70%{box-shadow:0 0 0 7px rgba(30,142,62,0);} 100%{box-shadow:0 0 0 0 rgba(30,142,62,0);} }
 .nav-sep { width:1px; height:24px; background:var(--g300); margin:0 6px; }
 .pill-btn { display:flex; align-items:center; gap:8px; border:1px solid var(--g300); background:var(--white); border-radius:999px; padding:9px 16px; font-size:13.5px; font-weight:600; color:var(--blue); cursor:pointer; font-family:inherit; }
@@ -373,8 +380,8 @@ input[type=range]::-moz-range-thumb { width:16px; height:16px; border-radius:50%
 /* Manager dock — FAB + floating panel */
 .mgr-dock {
     position: fixed;
-    right: -185px;
-    bottom: -50px;
+    right: -170px;
+    bottom: -160px;
     z-index: 60;
 }
 .mgr-fab { width:56px; height:56px; border-radius:50%; border:none; cursor:pointer; position:relative;
