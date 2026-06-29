@@ -107,6 +107,28 @@ function buildStrategyInsight(strategy, items, cohorts, basePrice) {
   };
 }
 
+// --- 4-step action flow helpers ---
+function FlowStep({ n, label, sublabel, icon, state, onClick }) {
+  const isClickable = !!onClick;
+  const showCheck = state === "done" || state === "locked-highlight";
+  return (
+    <button
+      type="button"
+      className={`flow-step ${state || "pending"}`}
+      onClick={onClick || undefined}
+      disabled={!isClickable}
+      aria-label={label}
+    >
+      <div className="flow-step-num">{showCheck ? "✓" : (icon || n)}</div>
+      <div className="flow-step-label">{label}</div>
+      <div className="flow-step-sub">{sublabel || "\u00A0"}</div>
+    </button>
+  );
+}
+function FlowConnector({ state }) {
+  return <div className={`flow-conn ${state || ""}`} aria-hidden />;
+}
+
 export default function SimulatorPage() {
   // Config state (all filters from the HTML template) — pre-filled with AuroraBuds default
   const [config, setConfig] = useState({
@@ -125,14 +147,14 @@ export default function SimulatorPage() {
     priceChange: 0, category: "all", segments: [], gender: "all",
     incomeGroups: [], offerType: "none", offerValue: 0, channel: "all",
   });
-  const [configured, setConfigured] = useState(true);
+  const [configured, setConfigured] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [ragDocs, setRagDocs] = useState(DEFAULT_RAG_DOCS);
   const [ragBuilt, setRagBuilt] = useState(false);
   const [scenarioId, setScenarioId] = useState(null);
   const [strategy, setStrategy] = useState("customers");
   const [strategyPicked, setStrategyPicked] = useState(false);
-  const [showStrategyModal, setShowStrategyModal] = useState(true);
+  const [showStrategyModal, setShowStrategyModal] = useState(false);
 
   const STRATEGY_OPTIONS = [
     {
@@ -172,6 +194,23 @@ export default function SimulatorPage() {
   const [mgrThreads, setMgrThreads] = useState([]);
   const votePollRef = useRef(null);
   const pollRef = useRef(null);
+  // Tracks the run we currently care about; stale in-flight poll fetches
+  // (e.g. after Cancel) are discarded by comparing against this.
+  const activeRunRef = useRef(null);
+
+  // Track the run/results column height so the survey card on the right can
+  // dynamically match it. If links exceed the available space the inner list
+  // scrolls; otherwise the card collapses to fit (no awkward empty space).
+  const leftColRef = useRef(null);
+  const [leftColHeight, setLeftColHeight] = useState(null);
+  useEffect(() => {
+    if (!leftColRef.current || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(entries => {
+      for (const e of entries) setLeftColHeight(Math.round(e.contentRect.height));
+    });
+    ro.observe(leftColRef.current);
+    return () => ro.disconnect();
+  }, []);
 
   // BroadcastChannel: listen for survey tab messages
   useEffect(() => {
@@ -242,6 +281,8 @@ export default function SimulatorPage() {
   const pollStatus = useCallback(async (runId) => {
     try {
       const data = await getRun(runId);
+      // Discard stale responses from a run that was cancelled/reset while in-flight
+      if (activeRunRef.current !== runId) return;
       setRun(data);
 
       // Fetch partial agents while running or waiting for humans
@@ -322,6 +363,7 @@ export default function SimulatorPage() {
       // If the user built a product knowledge base ("Update Product"), that scenario
       // holds the RAG index — keep using it so survey tabs can answer questions.
       setScenarioId((prev) => prev || scenario.scenario_id);
+      activeRunRef.current = runData.run_id;
       setRun(runData);
       // Broadcast runId to survey tabs so they can POST votes to the correct run
       busPost({ type: "run-id-sync", runId: runData.run_id });
@@ -334,6 +376,7 @@ export default function SimulatorPage() {
   };
 
   const handleReset = () => {
+    activeRunRef.current = null;
     setRun(null); setResults(null); setAgents(null); setLiveAgents(null); setHumanVotes(null); setError(null);
     setCustomerVotes({}); setLiveVotes({ yes: 0, never: 0, unsure: 0 });
     if (votePollRef.current) { clearInterval(votePollRef.current); votePollRef.current = null; }
@@ -341,6 +384,158 @@ export default function SimulatorPage() {
     busPost({ type: "survey-closed" });
     // Clear survey links in header
     busPost({ type: "survey-links-update", runId: null, customers: [], votes: {} });
+  };
+
+  // Full reset — also stops any running poll/timer and clears loading state.
+  // Used by Step 3 "Cancel Run" and the top-right Reset button.
+  const resetAll = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    handleReset();
+    setLoading(false);
+  };
+
+  // Finish the live run early (or when the timer ends) and compute results.
+  // Body is identical to the inline handler previously attached to the
+  // "Finish now & see results" button — extracted so the flow step can reuse it.
+  const handleFinishNow = async () => {
+    clearInterval(pollRef.current);
+    if (votePollRef.current) { clearInterval(votePollRef.current); votePollRef.current = null; }
+    busPost({ type: "survey-closed" });
+    try {
+      if (run?.run_id) {
+        let finalResults = null;
+        let agentData = null;
+
+        if (Object.keys(customerVotes).length > 0) {
+          try {
+            const reconciled = await reconcileRun(run.run_id, customerVotes);
+            if (reconciled?.results) finalResults = reconciled.results;
+          } catch (reconcileErr) {
+            console.warn("Reconcile failed:", reconcileErr);
+          }
+        }
+
+        if (!finalResults) {
+          try { finalResults = await getResults(run.run_id); } catch (_) {}
+        }
+
+        try { agentData = await getAgents(run.run_id); } catch (_) {}
+        if (!agentData && liveAgents) agentData = liveAgents;
+
+        if (!finalResults && agentData) {
+          const items = Array.isArray(agentData) ? agentData : agentData?.items || [];
+          const buyCount = items.filter(a => a.predicted_action === "buy").length;
+          const holdCount = items.filter(a => a.predicted_action === "hold").length;
+          const leaveCount = items.filter(a => a.predicted_action === "leave").length;
+          const total = items.length || 1;
+          const buyRateFrac = buyCount / total;
+          const leaveRateFrac = leaveCount / total;
+          const avgPropensity = items.length > 0 ? items.reduce((s, a) => s + (a.propensity_to_buy || 0), 0) / items.length : 0;
+          const totalRevenue = items.reduce((s, a) => s + (a.expected_spend_usd || 0), 0);
+          const successScore = Math.max(0, Math.min(100, Math.round((buyRateFrac * 70 + avgPropensity * 100 * 0.3) - leaveRateFrac * 15)));
+          const verdict = successScore >= 50 ? "succeed" : successScore >= 30 ? "borderline" : "fail";
+          const humanYes = liveVotes?.yes || 0;
+          const humanNever = liveVotes?.never || 0;
+          const humanUnsure = liveVotes?.unsure || 0;
+          const humanTotal = humanYes + humanNever + humanUnsure;
+          const humanYesShare = humanTotal > 0 ? (humanYes + humanUnsure * 0.5) / humanTotal : buyRateFrac;
+          const absDiff = Math.abs(humanYesShare - buyRateFrac);
+          const sampleConf = Math.min(1.0, humanTotal / 5.0);
+          const devPct = Math.round(absDiff * sampleConf * 100);
+          const outcome = devPct <= 10 ? "sync" : devPct >= 40 ? "inconclusive" : "adjusted";
+          const blendWeight = outcome === "adjusted" ? sampleConf * 0.5 : 0;
+          const adjustedScore = outcome === "adjusted"
+            ? Math.round(successScore + (humanYesShare * 100 - successScore) * blendWeight)
+            : successScore;
+
+          const cohorts = {};
+          const ageGroups = {};
+          const genderGroups = {};
+          const incomeGroups = {};
+          const getAgeBucket = (age) => {
+            const v = parseInt(age) || 0;
+            if (v < 25) return "18-24";
+            if (v < 35) return "25-34";
+            if (v < 45) return "35-44";
+            if (v < 55) return "45-54";
+            if (v < 65) return "55-64";
+            return "65+";
+          };
+          const getIncomeTier = (income) => {
+            const v = parseFloat(income) || 0;
+            if (v < 35000) return "Low";
+            if (v < 60000) return "Lower-Mid";
+            if (v < 90000) return "Mid";
+            if (v < 140000) return "Upper-Mid";
+            return "High";
+          };
+          items.forEach(a => {
+            const ag = getAgeBucket(a.age);
+            const g = a.gender || "Unknown";
+            const inc = getIncomeTier(a.annual_income_usd);
+            [[ageGroups, ag], [genderGroups, g], [incomeGroups, inc]].forEach(([grp, key]) => {
+              if (!grp[key]) grp[key] = { propSum: 0, churnSum: 0, n: 0 };
+              grp[key].n++;
+              grp[key].propSum += (a.propensity_to_buy || 0);
+              grp[key].churnSum += (a.churn_probability || 0);
+            });
+          });
+          const buildCohort = (groups) => Object.entries(groups)
+            .filter(([name]) => name !== "Unknown")
+            .map(([name, v]) => ({
+              name, n: v.n,
+              propensity: v.n ? v.propSum / v.n : 0,
+              churn_pct: v.n ? (v.churnSum / v.n) * 100 : 0,
+            }));
+          cohorts.by_age = buildCohort(ageGroups);
+          cohorts.by_gender = buildCohort(genderGroups);
+          cohorts.by_income_tier = buildCohort(incomeGroups);
+
+          finalResults = {
+            headline: {
+              success_score: successScore,
+              verdict,
+              buy: buyCount,
+              hold: holdCount,
+              leave: leaveCount,
+              n_agents: total,
+              avg_propensity_to_buy: avgPropensity,
+              avg_churn_probability: 0,
+              expected_revenue_delta_usd: totalRevenue,
+            },
+            cohorts,
+            reconciliation: humanTotal > 0 || config.humanPct > 0 ? {
+              outcome,
+              deviation_pct: devPct,
+              deviation_count: 0,
+              adjusted_score: adjustedScore,
+              original_score: successScore,
+              agent_buy_rate: buyRateFrac,
+              human_yes_share: humanYesShare,
+              human_votes: { yes: humanYes, not_sure: humanUnsure, never: humanNever },
+              human_total: humanTotal,
+              agent_votes: { buy: buyCount, hold: holdCount, leave: leaveCount },
+              agent_total: total,
+              sample_confidence: sampleConf,
+            } : undefined,
+          };
+          finalResults.strategy_insight = buildStrategyInsight(strategy, items, cohorts, config.price);
+        }
+
+        if (finalResults) {
+          setResults(finalResults);
+          setAgents(agentData);
+          setLiveAgents(null);
+          setLoading(false);
+        } else {
+          setError("Results not ready yet — the simulation is still processing. Try again in a few seconds.");
+        }
+        return;
+      }
+    } catch (e) {
+      setError(e.message || "Failed to fetch results");
+    }
+    setLoading(false);
   };
 
   // Broadcast survey-closed when simulator page is refreshed or closed
@@ -371,254 +566,91 @@ export default function SimulatorPage() {
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 24, alignItems: "stretch", justifyContent: "center", flexWrap: "nowrap" }}>
-          <div style={{ width: results ? "100%" : 905, maxWidth: "100%", minWidth: 0 }}>
-        {/* Action bar */}
-        <div className="card" style={{ padding: 16 }}>
-          {loading ? (
-            <div className="action-bar">
-              <button className="act-btn finish" onClick={async () => {
-                clearInterval(pollRef.current);
-                if (votePollRef.current) { clearInterval(votePollRef.current); votePollRef.current = null; }
-                // Close survey pages for this run
-                busPost({ type: "survey-closed" });
-                try {
-                  if (run?.run_id) {
-                    let finalResults = null;
-                    let agentData = null;
-
-                    // If we have real human votes, reconcile first (forces backend to compute results)
-                    if (Object.keys(customerVotes).length > 0) {
-                      try {
-                        const reconciled = await reconcileRun(run.run_id, customerVotes);
-                        if (reconciled?.results) finalResults = reconciled.results;
-                      } catch (reconcileErr) {
-                        console.warn("Reconcile failed:", reconcileErr);
-                      }
-                    }
-
-                    // Try to get results from backend
-                    if (!finalResults) {
-                      try {
-                        finalResults = await getResults(run.run_id);
-                      } catch (_) {}
-                    }
-
-                    // Get agent data
-                    try {
-                      agentData = await getAgents(run.run_id);
-                    } catch (_) {}
-
-                    // Fall back to partial agent data if backend results aren't ready
-                    if (!agentData && liveAgents) {
-                      agentData = liveAgents;
-                    }
-
-                    // If still no results but we have agent data, build results client-side
-                    if (!finalResults && agentData) {
-                      const items = Array.isArray(agentData) ? agentData : agentData?.items || [];
-                      const buyCount = items.filter(a => a.predicted_action === "buy").length;
-                      const holdCount = items.filter(a => a.predicted_action === "hold").length;
-                      const leaveCount = items.filter(a => a.predicted_action === "leave").length;
-                      const total = items.length || 1;
-                      const buyRateFrac = buyCount / total;
-                      const leaveRateFrac = leaveCount / total;
-                      const avgPropensity = items.length > 0 ? items.reduce((s, a) => s + (a.propensity_to_buy || 0), 0) / items.length : 0;
-                      const totalRevenue = items.reduce((s, a) => s + (a.expected_spend_usd || 0), 0);
-                      const successScore = Math.max(0, Math.min(100, Math.round((buyRateFrac * 70 + avgPropensity * 100 * 0.3) - leaveRateFrac * 15)));
-                      const verdict = successScore >= 50 ? "succeed" : successScore >= 30 ? "borderline" : "fail";
-                      const humanYes = liveVotes?.yes || 0;
-                      const humanNever = liveVotes?.never || 0;
-                      const humanUnsure = liveVotes?.unsure || 0;
-                      const humanTotal = humanYes + humanNever + humanUnsure;
-                      const humanYesShare = humanTotal > 0 ? (humanYes + humanUnsure * 0.5) / humanTotal : buyRateFrac;
-                      const absDiff = Math.abs(humanYesShare - buyRateFrac);
-                      const sampleConf = Math.min(1.0, humanTotal / 5.0);
-                      const devPct = Math.round(absDiff * sampleConf * 100);
-                      const outcome = devPct <= 10 ? "sync" : devPct >= 40 ? "inconclusive" : "adjusted";
-                      const blendWeight = outcome === "adjusted" ? sampleConf * 0.5 : 0;
-                      const adjustedScore = outcome === "adjusted"
-                        ? Math.round(successScore + (humanYesShare * 100 - successScore) * blendWeight)
-                        : successScore;
-
-                      // Build all 4 cohorts from agent data
-                      const cohorts = {};
-                      const ageGroups = {};
-                      const genderGroups = {};
-                      const incomeGroups = {};
-                      const getAgeBucket = (age) => {
-                        const v = parseInt(age) || 0;
-                        if (v < 25) return "18-24";
-                        if (v < 35) return "25-34";
-                        if (v < 45) return "35-44";
-                        if (v < 55) return "45-54";
-                        if (v < 65) return "55-64";
-                        return "65+";
-                      };
-                      const getIncomeTier = (income) => {
-                        const v = parseFloat(income) || 0;
-                        if (v < 35000) return "Low";
-                        if (v < 60000) return "Lower-Mid";
-                        if (v < 90000) return "Mid";
-                        if (v < 140000) return "Upper-Mid";
-                        return "High";
-                      };
-                      items.forEach(a => {
-                        const ag = getAgeBucket(a.age);
-                        const g = a.gender || "Unknown";
-                        const inc = getIncomeTier(a.annual_income_usd);
-
-                        [[ ageGroups, ag ], [ genderGroups, g ], [ incomeGroups, inc ]].forEach(([grp, key]) => {
-                          if (!grp[key]) grp[key] = { propSum: 0, churnSum: 0, n: 0 };
-                          grp[key].n++;
-                          grp[key].propSum += (a.propensity_to_buy || 0);
-                          grp[key].churnSum += (a.churn_probability || 0);
-                        });
-                      });
-                      const buildCohort = (groups) => Object.entries(groups)
-                        .filter(([name]) => name !== "Unknown")
-                        .map(([name, v]) => ({
-                          name, n: v.n,
-                          propensity: v.n ? v.propSum / v.n : 0,
-                          churn_pct: v.n ? (v.churnSum / v.n) * 100 : 0,
-                        }));
-                      cohorts.by_age = buildCohort(ageGroups);
-                      cohorts.by_gender = buildCohort(genderGroups);
-                      cohorts.by_income_tier = buildCohort(incomeGroups);
-
-                      finalResults = {
-                        headline: {
-                          success_score: successScore,
-                          verdict,
-                          buy: buyCount,
-                          hold: holdCount,
-                          leave: leaveCount,
-                          n_agents: total,
-                          avg_propensity_to_buy: avgPropensity,
-                          avg_churn_probability: 0,
-                          expected_revenue_delta_usd: totalRevenue,
-                        },
-                        cohorts,
-                        reconciliation: humanTotal > 0 || config.humanPct > 0 ? {
-                          outcome,
-                          deviation_pct: devPct,
-                          deviation_count: 0,
-                          adjusted_score: adjustedScore,
-                          original_score: successScore,
-                          agent_buy_rate: buyRateFrac,
-                          human_yes_share: humanYesShare,
-                          human_votes: { yes: humanYes, not_sure: humanUnsure, never: humanNever },
-                          human_total: humanTotal,
-                          agent_votes: { buy: buyCount, hold: holdCount, leave: leaveCount },
-                          agent_total: total,
-                          sample_confidence: sampleConf,
-                        } : undefined,
-                      };
-                      finalResults.strategy_insight = buildStrategyInsight(strategy, items, cohorts, config.price);
-                    }
-
-                    if (finalResults) {
-                      setResults(finalResults);
-                      setAgents(agentData);
-                      setLiveAgents(null);
-                      setLoading(false);
-                    } else {
-                      setError("Results not ready yet — the simulation is still processing. Try again in a few seconds.");
-                    }
-                    return;
-                  }
-                } catch (e) {
-                  setError(e.message || "Failed to fetch results");
-                }
-                setLoading(false);
-              }}>
-                ✓ Finish now &amp; see results
-              </button>
-              <button className="act-btn ghost" onClick={() => { clearInterval(pollRef.current); handleReset(); setLoading(false); }}>
-                ✕ Cancel run
-              </button>
-            </div>
-          ) : (
-            <div className="action-bar">
-              <button className="act-btn config" onClick={() => setShowConfig(true)}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-                  <span>🏛️</span>
-                  <span>Configure Product</span>
-                  <span aria-hidden style={{ width: 1, height: 18, background: "rgba(15,23,42,.12)" }} />
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "4px 11px",
-                      borderRadius: 8,
-                      background: "#e8f0ff",
-                      border: "1.5px solid #c4d8f7",
-                      color: "#1558b0",
-                      fontSize: 12.5,
-                      fontWeight: 700,
-                      letterSpacing: ".1px",
-                    }}
-                  >
-                    {activeStrategy.btn}
-                  </span>
-                </span>
-              </button>
-              <button className={`act-btn run${configured ? "" : " disabled"}`} onClick={handleRun}>
-                ▶ Run Market Swarm Simulation
-              </button>
-            </div>
-          )}
-          <div
-            className="action-summary"
-            style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 12 }}
-          >
-            <div style={{ justifySelf: "start" }}>
-              {!loading && (
-                <button
-                  type="button"
-                  onClick={() => setShowStrategyModal(true)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "6px 12px",
-                    borderRadius: 8,
-                    background: "#eef4ff",
-                    border: "1px solid #cfe0fb",
-                    color: "var(--blue)",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    fontSize: 12.5,
-                    lineHeight: 1,
-                    transition: "all .15s ease",
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "#dfeaff"; e.currentTarget.style.borderColor = "#a8c8f5"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "#eef4ff"; e.currentTarget.style.borderColor = "#cfe0fb"; }}
-                >
-                  ⇄ Change strategy
-                </button>
-              )}
-            </div>
-            <div style={{ justifySelf: "center", textAlign: "center" }}>
-              {configured ? (
-                <>
-                  <span style={{ fontWeight: 700, color: "var(--g900)" }}>“{config.productName || "Unnamed product"}”</span>
-                  <span style={{ color: "var(--g300)", margin: "0 8px" }}>·</span>
-                  <span>{config.count.toLocaleString()} panel</span>
-                  <span style={{ color: "var(--g300)", margin: "0 8px" }}>·</span>
-                  <span>{config.humanPct}% human / {100 - config.humanPct}% agent</span>
-                </>
-              ) : (
-                "Configure a product first, then run the blended human + agent simulation."
-              )}
-            </div>
-            <div />
+        {/* === 4-step action flow card (full width above) === */}
+        <div className="card sim-flow-card">
+          <div className="sim-flow">
+            {/* Step 1 — Select Strategy */}
+            <FlowStep
+              n={1}
+              label="🎯 Select Strategy"
+              sublabel={strategyPicked ? activeStrategy.btn : "Choose your objective"}
+              state={(loading || results) ? (strategyPicked ? "done" : "disabled") : (strategyPicked ? "done" : "current")}
+              onClick={(loading || results) ? null : (() => setShowStrategyModal(true))}
+            />
+            <FlowConnector state={strategyPicked ? (loading || results ? "done" : "active") : ""} />
+            {/* Step 2 — Configure Product */}
+            <FlowStep
+              n={2}
+              label="⚙ Configure Product"
+              sublabel={configured ? (config.productName ? `“${(config.productName.length > 22 ? config.productName.slice(0, 22) + "…" : config.productName)}”` : "Configured") : (strategyPicked ? "Set up your product" : "Product setup")}
+              state={
+                (loading || results) ? (configured ? "done" : "disabled") :
+                !strategyPicked ? "pending" :
+                configured ? "done" : "current"
+              }
+              onClick={(loading || results || !strategyPicked) ? null : (() => setShowConfig(true))}
+            />
+            <FlowConnector state={(configured && strategyPicked) ? (loading || results ? "done" : "active") : ""} />
+            {/* Step 3 — Run / Cancel */}
+            <FlowStep
+              n={3}
+              label={loading ? "Cancel Run" : (results ? "▶ Run Simulation" : "▶ Run Simulation")}
+              sublabel={loading ? "Stop & reset" : (results ? "Run completed" : (configured && strategyPicked ? "Start the swarm" : "Awaiting setup"))}
+              icon={loading ? "✕" : null}
+              state={
+                results ? "done" :
+                loading ? "running" :
+                (configured && strategyPicked ? "current" : "pending")
+              }
+              onClick={
+                results ? null :
+                loading ? resetAll :
+                (configured && strategyPicked ? handleRun : null)
+              }
+            />
+            <FlowConnector state={loading ? "green-active" : (results ? "green-done" : "")} />
+            {/* Step 4 — Analyze Results */}
+            <FlowStep
+              n={4}
+              label={loading ? "⚡ Finish & Analyze" : "📊 Analyze Results"}
+              sublabel={results ? "Results ready" : (loading ? "Show results now" : "Awaiting run")}
+              state={
+                results ? "locked-highlight" :
+                loading ? "active-finish" :
+                "pending"
+              }
+              onClick={loading ? handleFinishNow : null}
+            />
           </div>
+          <div style={{ marginTop: 14, textAlign: "center", fontSize: 12.5, color: "var(--g600)" }}>
+            {configured ? (
+              <>
+                <span style={{ fontWeight: 700, color: "var(--g900)" }}>“{config.productName || "Unnamed product"}”</span>
+                <span style={{ color: "var(--g300)", margin: "0 8px" }}>·</span>
+                <span>{config.count.toLocaleString()} panel</span>
+                <span style={{ color: "var(--g300)", margin: "0 8px" }}>·</span>
+                <span>{config.humanPct}% human / {100 - config.humanPct}% agent</span>
+              </>
+            ) : (
+              "Configure a product first, then run the blended human + agent simulation."
+            )}
+          </div>
+          <button
+            type="button"
+            className="sim-flow-reset"
+            onClick={resetAll}
+            title="Reset everything and start over"
+          >
+            ↻ Reset
+          </button>
         </div>
 
+        {/* === Two-column layout below the action card === */}
+        <div style={{ display: "flex", gap: 24, alignItems: "flex-start", justifyContent: "center", flexWrap: "nowrap", marginTop: 22 }}>
+          <div ref={leftColRef} style={{ flex: 1, minWidth: 0 }}>
         {/* Live panel while running */}
         {loading && (
-          <div style={{ marginTop: 22 }}>
+          <div>
             {run ? (
               <>
                 <LivePanel run={run} config={config} agents={liveAgents} liveVotes={liveVotes} customerVotes={customerVotes} onTimerEnd={() => busPost({ type: "survey-closed" })} />
@@ -633,17 +665,11 @@ export default function SimulatorPage() {
 
         {/* Results */}
         {!loading && results && (
-          <div className="stack" style={{ marginTop: 22 }}>
-            {run?.human_customers?.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#f2f7ff", border: "1px solid #d7e3f7", borderRadius: 10, fontSize: 13.5, color: "#1558b0", fontWeight: 600 }}>
-                <span style={{ fontSize: 15 }}>👥</span>
-                {Object.keys(customerVotes).length} of {run.human_customers.length} human survey responses collected · survey closed
-              </div>
-            )}
-            {results.reconciliation && <ReconcileCard results={results} />}
+          <div className="stack">
             <VerdictGauge results={results} onReset={handleReset} />
-            {results.strategy_insight && <StrategyInsight insight={results.strategy_insight} />}
             {agentList.length > 0 && <SwarmDots agents={agentList} totalAgents={results.headline?.n_agents} customerVotes={customerVotes} />}
+            {results.strategy_insight && <StrategyInsight insight={results.strategy_insight} />}
+            {results.reconciliation && <ReconcileCard results={results} />}
             {agentList.length > 0 && <PropensityChart agents={agentList} />}
             <div className="chart-grid">
               {results.cohorts?.by_age && <CohortChart title="By Age" data={results.cohorts.by_age} subtitle="Propensity and churn by age group" />}
@@ -659,9 +685,8 @@ export default function SimulatorPage() {
           <div
             className="card empty"
             style={{
-              marginTop: 22,
-              padding: "40px 32px",
-              minHeight: 380,
+              padding: "32px 28px",
+              minHeight: 300,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
@@ -674,47 +699,33 @@ export default function SimulatorPage() {
               style={{ width: 72, height: 72, fontSize: 32, marginBottom: 18 }}
             >🎛️</div>
             <div className="empty-t" style={{ fontSize: 22 }}>
-              {configured ? "Ready to run" : "Configure a product to begin"}
+              {!strategyPicked ? "Pick a strategy to begin" : (configured ? "Ready to run" : "Configure a product to begin")}
             </div>
             <div
               className="empty-s"
-              style={{ fontSize: 15, marginTop: 10, maxWidth: 560, lineHeight: 1.6 }}
+              style={{ fontSize: 15, marginTop: 10, maxWidth: "none", width: "100%", lineHeight: 1.6 }}
               dangerouslySetInnerHTML={{
-                __html: configured
-                  ? 'Press <b>Run Market Swarm Simulation</b>. Agents compute instantly; human responses are collected live over a 10-minute window, with results refreshing every 5 seconds.'
-                  : 'Press <b>Configure a product</b> to set the product, the human/agent mix and the audience. Then run the blended simulation.'
+                __html: !strategyPicked
+                  ? 'Start with <b>Select Strategy</b> in the flow above to choose your launch objective.'
+                  : configured
+                  ? 'Press <b>Run Simulation</b> in the flow above. Agents compute instantly; human responses are collected live over a 10-minute window, with results refreshing every 5 seconds.'
+                  : 'Open <b>Configure Product</b> to set the product, the human/agent mix and the audience. Then run the blended simulation.'
               }}
             />
           </div>
         )}
           </div>
-          {!results && (
-          <div className="card" style={{ flex: "0 0 380px", width: 380, padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <div
+            className="card survey-card-fill"
+            style={leftColHeight ? { height: leftColHeight, maxHeight: leftColHeight } : undefined}
+          >
             <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "14px 18px", background: "#f2f7ff", color: "#1558b0", borderBottom: "1px solid #d7e3f7", fontWeight: 700, fontSize: 15 }}>
               <span style={{ fontSize: 17 }}>🌐</span>
               Show Customer Survey
             </div>
-            {run?.human_customers?.length > 0 && results ? (
-              /* Session ended → survey closed summary */
-              <div style={{ flex: 1, minHeight: 320, display: "grid", placeItems: "center", padding: 24, textAlign: "center" }}>
-                <div>
-                  <div className="empty-ic" style={{ margin: "0 auto 14px", fontSize: 26 }}>🔒</div>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>Survey closed</div>
-                  <div style={{ fontSize: 13, color: "var(--g500)", marginTop: 6, lineHeight: 1.5, maxWidth: 260 }}>
-                    The simulation has ended — the survey is no longer accepting responses.
-                  </div>
-                  <div style={{ marginTop: 18, display: "inline-flex", flexDirection: "column", gap: 4, padding: "14px 26px", background: "#f2f7ff", border: "1px solid #d7e3f7", borderRadius: 12 }}>
-                    <span style={{ fontSize: 30, fontWeight: 800, color: "#1558b0", lineHeight: 1 }}>
-                      {Object.keys(customerVotes).length}
-                      <span style={{ fontSize: 17, color: "var(--g500)", fontWeight: 600 }}> / {run.human_customers.length}</span>
-                    </span>
-                    <span style={{ fontSize: 12, color: "var(--g500)" }}>responses collected</span>
-                  </div>
-                </div>
-              </div>
-            ) : run?.human_customers?.length > 0 ? (
+            {run?.human_customers?.length > 0 ? (
               <>
-                <div className="survey-links-list" style={{ flex: 1, maxHeight: "none" }}>
+                <div className="survey-links-list">
                   {run.human_customers.map((h, i) => {
                     const voted = customerVotes[h.customer_id];
                     const url = `/survey?runId=${run.run_id}&custId=${h.customer_id}&name=${encodeURIComponent(h.name || h.customer_id)}&gender=${encodeURIComponent(h.gender || "")}`;
@@ -729,7 +740,9 @@ export default function SimulatorPage() {
                           <div className="survey-link-id">{h.customer_id}</div>
                         </div>
                         {voted ? (
-                          <span className="survey-link-status done">✓ {voted}</span>
+                          <span className="survey-link-status done">{voted}</span>
+                        ) : results ? (
+                          <span className="survey-link-status not-responded">not responded</span>
                         ) : (
                           <span className="survey-link-status pending">pending</span>
                         )}
@@ -738,26 +751,29 @@ export default function SimulatorPage() {
                     );
                   })}
                 </div>
-                <button className="survey-links-openall" onClick={() => {
-                  run.human_customers.forEach(h => {
-                    const url = `/survey?runId=${run.run_id}&custId=${h.customer_id}&name=${encodeURIComponent(h.name || h.customer_id)}&gender=${encodeURIComponent(h.gender || "")}`;
-                    window.open(url, "_blank");
-                  });
-                }}>
-                  Nudge all {run.human_customers.length}
-                </button>
+                {!results && (
+                  <button className="survey-links-openall" onClick={() => {
+                    run.human_customers.forEach(h => {
+                      const url = `/survey?runId=${run.run_id}&custId=${h.customer_id}&name=${encodeURIComponent(h.name || h.customer_id)}&gender=${encodeURIComponent(h.gender || "")}`;
+                      window.open(url, "_blank");
+                    });
+                  }}>
+                    Nudge all {run.human_customers.length}
+                  </button>
+                )}
               </>
             ) : (
               <div style={{ flex: 1, minHeight: 320, display: "grid", placeItems: "center", padding: 24, textAlign: "center" }}>
                 <div>
                   <div className="empty-ic" style={{ margin: "0 auto 12px" }}>🌐</div>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>No active survey</div>
-                  <div style={{ fontSize: 13, color: "var(--g500)", marginTop: 6 }}>Start a simulation to generate survey links for real users.</div>
+                  <div style={{ fontSize: 13, color: "var(--g500)", marginTop: 6 }}>
+                    {results ? "This run had no human respondents." : "Start a simulation to generate survey links for real users."}
+                  </div>
                 </div>
               </div>
             )}
           </div>
-          )}
         </div>
       </div>
 

@@ -75,15 +75,17 @@ function statValue(services, key, label) {
 export default function InternalsPage() {
   const [data, setData] = useState(null);
   const [hits, setHits] = useState(null);
+  const [hits7d, setHits7d] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     try {
       setError("");
-      const [res, h] = await Promise.all([getAwsMetrics(10080), getHits(60).catch(() => null)]);
+      const [res, h, h7] = await Promise.all([getAwsMetrics(10080), getHits(60).catch(() => null), getHits(10080).catch(() => null)]);
       setData(res);
       setHits(h);
+      setHits7d(h7);
     } catch (e) {
       setError(e.message || "Failed to load metrics");
     } finally {
@@ -98,6 +100,14 @@ export default function InternalsPage() {
     const id = setInterval(() => {
       getHits(60).then(setHits).catch(() => {});
     }, 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Refresh the 7-day window less often (it changes slowly).
+  useEffect(() => {
+    const id = setInterval(() => {
+      getHits(10080).then(setHits7d).catch(() => {});
+    }, 60000);
     return () => clearInterval(id);
   }, []);
 
@@ -180,7 +190,7 @@ export default function InternalsPage() {
       </div>
 
       {/* Vercel frontend hits (page views) */}
-      <VercelHitsCard hits={hits} />
+      <VercelHitsCard hits={hits} hits7d={hits7d} />
 
       {error && (
         <div className="card" style={{ padding: 20, marginBottom: 24, borderLeft: "4px solid var(--red)", color: "var(--g700)" }}>
@@ -299,13 +309,15 @@ function ServiceCard({ svc }) {
   );
 }
 
-function VercelHitsCard({ hits }) {
+function VercelHitsCard({ hits, hits7d }) {
   const series = hits?.series || [];
   const lifetime = hits?.lifetime_total || 0;
   const recent = hits?.recent_total || 0;
   const rate = hits?.rate_per_min || 0;
   const top = hits?.top_paths || [];
   const window = hits?.window_minutes || 60;
+  const series7d = hits7d?.series || [];
+  const recent7d = hits7d?.recent_total || 0;
   const COLOR = "#000"; // Vercel brand black
   const ACCENT = "#0070f3";
 
@@ -349,19 +361,23 @@ function VercelHitsCard({ hits }) {
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={140}>
-        <AreaChart data={series} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "2px 0 4px" }}>
+        <div style={{ fontSize: 11, color: "var(--g500)", fontWeight: 600 }}>Last 7 days</div>
+        <div style={{ fontSize: 11, color: "var(--g500)" }}>{fmt(recent7d)} hits</div>
+      </div>
+      <ResponsiveContainer width="100%" height={160}>
+        <AreaChart data={series7d} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
           <defs>
-            <linearGradient id="grad-vercel-hits" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id="grad-vercel-hits-7d" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={ACCENT} stopOpacity={0.45} />
               <stop offset="95%" stopColor={ACCENT} stopOpacity={0.02} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--g200)" vertical={false} />
-          <XAxis dataKey="t" tick={{ fontSize: 10, fill: "var(--g400)" }} interval={Math.ceil(Math.max(series.length, 1) / 6)} />
+          <XAxis dataKey="t" tick={{ fontSize: 10, fill: "var(--g400)" }} interval={Math.ceil(Math.max(series7d.length, 1) / 7)} />
           <YAxis tick={{ fontSize: 10, fill: "var(--g400)" }} width={36} allowDecimals={false} />
           <Tooltip contentStyle={{ background: "var(--bg)", border: "1px solid var(--g200)", borderRadius: 8, fontSize: 12 }} />
-          <Area type="monotone" dataKey="hits" name="Hits" stroke={ACCENT} strokeWidth={2} fill="url(#grad-vercel-hits)" animationDuration={600} isAnimationActive={false} />
+          <Area type="monotone" dataKey="hits" name="Hits" stroke={ACCENT} strokeWidth={2} fill="url(#grad-vercel-hits-7d)" animationDuration={600} isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
 

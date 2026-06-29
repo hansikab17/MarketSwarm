@@ -176,6 +176,18 @@ const budgetUtilization = [
   { m: "Apr", median: 46 }, { m: "May", median: 49 }, { m: "Jun", median: 52 },
 ];
 
+// Section nav metadata — drives both the chip strip and the section anchors.
+const SECTIONS = [
+  { id: "transactions", icon: "🛒", label: "Transactions", color: "#6366f1" },
+  { id: "reviews",      icon: "⭐", label: "Reviews",      color: "#f59e0b" },
+  { id: "feedback",     icon: "💬", label: "Feedback",     color: "#10b981" },
+  { id: "returns",      icon: "↩️", label: "Returns",      color: "#ef4444" },
+  { id: "contracts",    icon: "📄", label: "Contracts",    color: "#8b5cf6" },
+  { id: "billing",      icon: "🧾", label: "Billing",      color: "#0ea5e9" },
+  { id: "support",      icon: "🎧", label: "Support",      color: "#ec4899" },
+  { id: "budget",       icon: "💰", label: "Budget",       color: "#14b8a6" },
+];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Layout helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -190,14 +202,14 @@ function Kpi({ label, value, unit, color = "#1558b0" }) {
   );
 }
 
-function Section({ icon, title, desc, color, kpis, children }) {
+function Section({ id, icon, title, desc, color, kpis, children }) {
   return (
-    <div className="card" style={{ padding: 22, borderTop: `3px solid ${color}` }}>
+    <div id={id} className="card" style={{ padding: 22, borderTop: `3px solid ${color}`, scrollMarginTop: 90 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 14 }}>
         <div style={{ width: 44, height: 44, borderRadius: 12, background: `${color}1a`, color, display: "grid", placeItems: "center", fontSize: 22, flexShrink: 0 }}>{icon}</div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: "var(--g900)", marginBottom: 4 }}>{title}</div>
-          <div style={{ fontSize: 13, color: "var(--g500)", lineHeight: 1.5 }}>{desc}</div>
+          <div style={{ fontSize: 25, fontWeight: 800, color: "var(--g900)", marginBottom: 4 }}>{title}</div>
+          <div style={{ fontSize: 16, color: "var(--g500)", lineHeight: 1.5 }}>{desc}</div>
         </div>
       </div>
       {kpis && (
@@ -205,6 +217,13 @@ function Section({ icon, title, desc, color, kpis, children }) {
           {kpis.map((k, i) => <Kpi key={i} {...k} color={k.color || color} />)}
         </div>
       )}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "22px 0 12px" }}>
+        <div style={{ width: 4, height: 16, borderRadius: 2, background: color }} />
+        <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: ".6px", textTransform: "uppercase", color: "var(--g700)" }}>
+          Data Stats
+        </div>
+        <div style={{ flex: 1, height: 1, background: "#eef0f3" }} />
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
         {children}
       </div>
@@ -239,11 +258,75 @@ export default function CustomerData() {
           Customer data we use <span className="grad">to ground the swarm</span>
         </h1>
         <p style={{ maxWidth: 720, fontSize: 15.5, lineHeight: 1.6, marginBottom: 22 }}>
-          Eight behavioural signals from a <b>10,000-customer panel</b> across the <b>past 6 months</b>, aggregated into a 360° profile for every synthetic customer. Figures below are illustrative dummy data.
+          Eight behavioural signals from a <b>10,000-customer panel</b> across the <b>past 6 months</b>, aggregated into a 360° profile for every synthetic customer.
         </p>
       </div>
 
-      <div className="land-stats" style={{ marginBottom: 28 }}>
+      {/* Section nav — jump to any of the 8 signal groups; stretches across full container width */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(8, minmax(0, 1fr))",
+          gap: 10,
+          margin: "18px 0 26px",
+          padding: "4px 0",
+        }}
+      >
+        {SECTIONS.map((s) => (
+          <a
+            key={s.id}
+            href={`#${s.id}`}
+            onClick={(e) => {
+              e.preventDefault();
+              const el = document.getElementById(s.id);
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "start" });
+                if (typeof window !== "undefined" && window.history?.replaceState) {
+                  window.history.replaceState(null, "", `#${s.id}`);
+                }
+              }
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 9,
+              padding: "22px 10px",
+              minHeight: 72,
+              background: "#fff",
+              border: `1px solid ${s.color}33`,
+              borderTop: `3px solid ${s.color}`,
+              borderRadius: 12,
+              fontSize: 13.5,
+              fontWeight: 700,
+              color: "var(--g800)",
+              textDecoration: "none",
+              textAlign: "center",
+              minWidth: 0,
+              whiteSpace: "nowrap",
+              transition: "background .15s, color .15s, transform .15s, box-shadow .15s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = `${s.color}10`;
+              e.currentTarget.style.color = s.color;
+              e.currentTarget.style.transform = "translateY(-1px)";
+              e.currentTarget.style.boxShadow = `0 6px 14px -8px ${s.color}66`;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "#fff";
+              e.currentTarget.style.color = "var(--g800)";
+              e.currentTarget.style.transform = "none";
+              e.currentTarget.style.boxShadow = "none";
+            }}
+          >
+            <span style={{ fontSize: 18, lineHeight: 1 }}>{s.icon}</span>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{s.label}</span>
+          </a>
+        ))}
+      </div>
+
+      <div className="land-stats" style={{ marginTop: 50, marginBottom: 40
+       }}>
         <div className="land-stat"><div className="land-stat-v">10,000</div><div className="land-stat-l">customers in panel</div></div>
         <div className="land-stat"><div className="land-stat-v">6 mo</div><div className="land-stat-l">rolling history</div></div>
         <div className="land-stat"><div className="land-stat-v">8</div><div className="land-stat-l">behavioural signals</div></div>
@@ -253,6 +336,7 @@ export default function CustomerData() {
       <div style={{ display: "grid", gap: 20 }}>
         {/* 1. Transactions */}
         <Section
+          id="transactions"
           icon="🛒"
           title="Transactions & purchases"
           desc="Frequency, recency, value, channel and basket mix — the backbone of spend behaviour."
@@ -291,6 +375,7 @@ export default function CustomerData() {
 
         {/* 2. Reviews */}
         <Section
+          id="reviews"
           icon="⭐"
           title="Reviews & ratings"
           desc="Star ratings, sentiment and product affinity drawn from what customers say."
@@ -332,6 +417,7 @@ export default function CustomerData() {
 
         {/* 3. Feedback */}
         <Section
+          id="feedback"
           icon="💬"
           title="Feedback & surveys"
           desc="NPS, CSAT and free-text themes that reveal motivations and friction."
@@ -372,6 +458,7 @@ export default function CustomerData() {
 
         {/* 4. Returns */}
         <Section
+          id="returns"
           icon="↩️"
           title="Returns"
           desc="Return reasons and rates — a strong negative signal for fit and satisfaction."
@@ -411,6 +498,7 @@ export default function CustomerData() {
 
         {/* 5. Contracts */}
         <Section
+          id="contracts"
           icon="📄"
           title="Contracts"
           desc="Tenure, terms, renewals and upgrades that show commitment and lifetime value."
@@ -452,6 +540,7 @@ export default function CustomerData() {
 
         {/* 6. Billing */}
         <Section
+          id="billing"
           icon="🧾"
           title="Billing"
           desc="Plan, payment health and dunning history, a proxy for budget and reliability."
@@ -490,6 +579,7 @@ export default function CustomerData() {
 
         {/* 7. Support tickets */}
         <Section
+          id="support"
           icon="🎧"
           title="Support tickets"
           desc="Volume, severity and resolution effort — early indicators of churn risk."
@@ -532,6 +622,7 @@ export default function CustomerData() {
 
         {/* 8. Budget & income */}
         <Section
+          id="budget"
           icon="💰"
           title="Budget & income band"
           desc="Estimated disposable budget used to test price sensitivity per segment."
@@ -568,11 +659,6 @@ export default function CustomerData() {
             </ResponsiveContainer>
           </ChartCard>
         </Section>
-      </div>
-
-      {/* Footer note */}
-      <div style={{ marginTop: 28, padding: "18px 22px", background: "#f7faff", border: "1px solid #cfe0fb", borderRadius: 14, fontSize: 13, color: "var(--g700)", lineHeight: 1.6 }}>
-        <b>Note:</b> The figures shown above are illustrative dummy data scaled to a 10,000-customer panel over the past 6 months. Real simulator runs sample fresh signals from your connected sources and aggregate them into a per-customer 360° profile before scoring intent. Predictions are directional, not a guarantee.
       </div>
     </div>
   );

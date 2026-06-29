@@ -45,7 +45,7 @@ export default function ReconcileCard({ results }) {
   const hNeverPct = Math.round(((human_votes?.never || 0) / hN) * 100);
 
   return (
-    <div className="card" style={{ padding: 28, border: `1.5px solid ${meta.border}`, borderTop: `4px solid ${meta.color}` }}>
+    <div className="card" style={{ padding: 28, border: `1.5px solid ${meta.border}` }}>
       {/* Badge */}
       <div style={{
         display: "inline-flex", alignItems: "center", gap: 8,
