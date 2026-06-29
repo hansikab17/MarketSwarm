@@ -206,11 +206,17 @@ export default function InternalsPage() {
       {loading ? (
         <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--g500)" }}>Loading AWS metrics…</div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 20 }}>
-          {services.map((svc) => (
-            <ServiceCard key={svc.key} svc={svc} />
-          ))}
-        </div>
+        <>
+          <div style={{ borderLeft: "4px solid var(--accent)", paddingLeft: 12, margin: "8px 0 16px" }}>
+            <div className="section-h" style={{ fontSize: 20, marginBottom: 4, textAlign: "left" }}>AWS service metrics</div>
+            <div style={{ fontSize: 13, color: "var(--g500)", textAlign: "left" }}>Live per-service telemetry from CloudWatch</div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 20 }}>
+            {services.map((svc) => (
+              <ServiceCard key={svc.key} svc={svc} />
+            ))}
+          </div>
+        </>
       )}
 
       <style jsx global>{`
@@ -327,7 +333,7 @@ function VercelHitsCard({ hits, hits7d }) {
   const ACCENT = "#0070f3";
 
   return (
-    <div className="card svc-card" style={{ padding: 22, borderTop: `3px solid ${COLOR}`, marginBottom: 24 }}>
+    <div className="card svc-card" style={{ padding: 22, borderTop: `3px solid ${COLOR}`, marginBottom: 30 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 4 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{
