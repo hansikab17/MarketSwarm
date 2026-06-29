@@ -1,4 +1,5 @@
 import "@/styles/globals.css";
+import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
@@ -37,6 +38,11 @@ export default function App({ Component, pageProps }) {
 
   return (
     <>
+      <Head>
+        <title>Market Swarm · Synthetic customer validation</title>
+        <meta name="description" content="Validate a product against thousands of synthetic customers" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+      </Head>
       <header className="header">
         <Link href="/" style={{ textDecoration: "none", display: "contents" }}>
           <div className="logo">
