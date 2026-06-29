@@ -13,8 +13,8 @@ export default function CohortChart({ title, subtitle, data }) {
 
   return (
     <div className="card" style={{ padding: 28 }}>
-      <div className="section-h" style={{ marginBottom: 2 }}>{title}</div>
-      {subtitle && <div style={{ fontSize: 13, color: "var(--g500)", marginBottom: 16 }}>{subtitle}</div>}
+      <div className="section-h" style={{ marginBottom: 2, fontSize: 18, textAlign: "center" }}>{title}</div>
+      {subtitle && <div style={{ fontSize: 12, color: "var(--g500)", marginBottom: 16, textAlign: "center" }}>{subtitle}</div>}
 
       <ResponsiveContainer width="100%" height={220}>
         <BarChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>

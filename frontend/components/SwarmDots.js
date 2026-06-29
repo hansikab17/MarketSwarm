@@ -13,6 +13,7 @@ export default function SwarmDots({ agents, totalAgents, customerVotes }) {
   useEffect(() => {
     if (!wrapRef.current) return;
     const measure = () => {
+      if (!wrapRef.current) return;
       const w = wrapRef.current.clientWidth;
       if (w > 0) setContainerW(w);
     };
@@ -69,7 +70,7 @@ export default function SwarmDots({ agents, totalAgents, customerVotes }) {
     <div className="card" style={{ padding: 28 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <div>
-          <div className="section-h" style={{ marginBottom: 2 }}>Swarm view</div>
+          <div className="section-h" style={{ marginBottom: 2, fontSize: 20, textAlign: "left" }}>Swarm view</div>
           <div style={{ fontSize: 13, color: "var(--g500)" }}>{count.toLocaleString()} of {total.toLocaleString()} agents shown</div>
         </div>
         <div style={{ display: "flex", gap: 6 }}>

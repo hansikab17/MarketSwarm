@@ -17,7 +17,7 @@ export default function PropensityChart({ agents }) {
 
   return (
     <div className="card" style={{ padding: 28 }}>
-      <div className="section-h" style={{ marginBottom: 4 }}>Propensity distribution</div>
+      <div className="section-h" style={{ marginBottom: 4, fontSize: 22 }}>Propensity distribution</div>
       <div style={{ fontSize: 13, color: "var(--g500)", marginBottom: 16 }}>Agent count by propensity bucket and decision</div>
 
       <ResponsiveContainer width="100%" height={260}>

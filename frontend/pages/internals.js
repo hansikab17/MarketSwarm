@@ -11,6 +11,7 @@ const ARCH = [
   { key: "sqs", label: "SQS", color: "#14b8a6" },
   { key: "lambda_worker", label: "Lambda · Worker", color: "#ec4899" },
   { key: "bedrock", label: "Bedrock Nova", color: "#8b5cf6" },
+  { key: "dynamodb", label: "DynamoDB", color: "#0ea5e9" },
 ];
 
 // Simplified AWS service glyphs (inherit color via currentColor).
@@ -41,6 +42,10 @@ function SvcIcon({ name, size = 22 }) {
       return (
         <svg {...common}><circle cx="12" cy="12" r="3" />
           <path d="M12 3v3.2M12 17.8V21M3 12h3.2M17.8 12H21M5.8 5.8l2.3 2.3M15.9 15.9l2.3 2.3M18.2 5.8l-2.3 2.3M8.1 15.9l-2.3 2.3" /></svg>
+      );
+    case "dynamodb": // DynamoDB — stacked tables
+      return (
+        <svg {...common}><ellipse cx="12" cy="6" rx="7" ry="2.6" /><path d="M5 6v12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6" /><path d="M5 12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6" /></svg>
       );
     case "tokens": // generic tokens
       return (
@@ -103,11 +108,11 @@ export default function InternalsPage() {
     return () => clearInterval(id);
   }, []);
 
-  // Refresh the 7-day window less often (it changes slowly).
+  // Refresh the 7-day window often too so a fresh visit shows up quickly.
   useEffect(() => {
     const id = setInterval(() => {
       getHits(10080).then(setHits7d).catch(() => {});
-    }, 60000);
+    }, 10000);
     return () => clearInterval(id);
   }, []);
 
