@@ -120,8 +120,14 @@ export default function LivePanel({ run, config, agents, liveVotes, customerVote
       {/* Header + countdown timer */}
       <div className="live-head">
         <div>
-          <div className="swarm-t">
-            <span style={{ color: "var(--blue)" }}>⏱</span> Collecting responses (live)
+          <div className="swarm-t" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span><span style={{ color: "var(--blue)" }}>⏱</span> Collecting responses (live)</span>
+            {!isDone && !isFailed && (
+              <span className="harness-loop" title="Backtest harness iterating">
+                <span className="harness-loop-ic">↻</span>
+                harness loop {Math.max(1, Math.ceil(agentsDone / 50)) || 1}
+              </span>
+            )}
           </div>
           <div className="swarm-s">
             Agents + humans · updating every 5s · step {agentsDone} of {total}
@@ -129,6 +135,16 @@ export default function LivePanel({ run, config, agents, liveVotes, customerVote
         </div>
         <div className="timer-pill">{fmtClock(secondsLeft)}</div>
       </div>
+      <style jsx>{`
+        .harness-loop {
+          display: inline-flex; align-items: center; gap: 5px;
+          font-size: 10.5px; font-weight: 700; color: var(--blue);
+          background: rgba(26,115,232,.08); border: 1px solid rgba(26,115,232,.25);
+          padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+        }
+        .harness-loop-ic { display: inline-block; animation: harnessSpin 1.1s linear infinite; }
+        @keyframes harnessSpin { to { transform: rotate(360deg); } }
+      `}</style>
 
       {/* Progress bar — driven by real responses */}
       <div className="progbar">
